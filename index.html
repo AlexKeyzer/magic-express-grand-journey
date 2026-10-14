@@ -601,7 +601,7 @@ window.ME_ASSETS = {"bg_reg1.jpg":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ
 </script>
 
 <!-- GamePush SDK (optional): single-file build works fully offline without it -->
-<script src="https://gamepush.com/sdk/game-push-sdk.js" onerror="window.__gpFail=1"></script>
+
 </head>
 <body>
 <div id="bg"></div>
@@ -639,11 +639,39 @@ window.ME_ASSETS = {"bg_reg1.jpg":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ
 (function () {
   'use strict';
   function bridge() { return window.bridge || window.vkBridge || null; }
+  /* ---- micro-bridge: VK iframe postMessage protocol (fallback when official bridge CDN is unavailable) ---- */
+  var _cb = 0, _pending = {};
+  function inIframe() { try { return window.top !== window.self; } catch (e) { return true; } }
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
+    if (!d || d.type !== 'vk-connect-result' || !d.data) return;
+    var p = _pending[d.data.callbackId];
+    if (!p) return;
+    delete _pending[d.data.callbackId];
+    if (d.data.error) p.rej(d.data.error); else p.res(d.data.result);
+  });
+  function microSend(method, params) {
+    return new Promise(function (res, rej) {
+      if (!inIframe()) { rej(new Error('not in iframe')); return; }
+      var id = ++_cb;
+      _pending[id] = { res: res, rej: rej };
+      try {
+        window.parent.postMessage(JSON.stringify({
+          type: 'vk-connect',
+          data: { handlerType: 'iframe', method: method, params: params || {}, callbackId: id }
+        }), '*');
+      } catch (e) { delete _pending[id]; rej(e); }
+      setTimeout(function () { if (_pending[id]) { delete _pending[id]; rej(new Error('timeout')); } }, 8000);
+    });
+  }
   function send(method, params) {
     var b = bridge();
-    if (!b || !b.send) return Promise.reject(new Error('no bridge'));
-    try { return Promise.resolve(b.send(method, params || {})); }
-    catch (e) { return Promise.reject(e); }
+    if (b && b.send) {
+      try { return Promise.resolve(b.send(method, params || {})); }
+      catch (e) { return Promise.reject(e); }
+    }
+    return microSend(method, params);
   }
   var VK = {
     inVK: function () {
@@ -652,7 +680,6 @@ window.ME_ASSETS = {"bg_reg1.jpg":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ
     },
     init: function () {
       send('VKWebAppInit').catch(function () {});
-      /* unlock banner session */
       VK._ready = true;
     },
     /* ---- banner ads ---- */
@@ -692,6 +719,7 @@ window.ME_ASSETS = {"bg_reg1.jpg":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ
     advertise: function () { return !!bridge(); }
   };
   window.VKSDK = VK;
+  if (inIframe()) send('VKWebAppInit').catch(function () {});   /* asap, before assets load */
 })();
 
 /* ============================================================
@@ -3775,7 +3803,10 @@ window.MEI18N = {
       var kk = q.split(':')[0], n = +q.split(':')[1];
       for (var i = 1; i <= n; i++) names.push('souv_' + kk + '_' + String(i).padStart(2, '0') + '.png');
     });
-    var done = 0, bar = $('load-bar'), pct = $('load-pct');
+    var done = 0, bar = $('load-bar'), pct = $('load-pct'), finished = false;
+    setTimeout(function () {   /* watchdog: never hang on a single broken asset */
+      if (!finished && done < names.length) { finished = true; preloaded = true; cb(); }
+    }, 6000);
     names.forEach(function (n) {
       var im = new Image();
       im.onload = im.onerror = function () {
@@ -3783,7 +3814,7 @@ window.MEI18N = {
         var pr = done / names.length;
         if (bar) bar.style.width = (pr * 100) + '%';
         if (pct) pct.textContent = Math.round(pr * 100) + '%';
-        if (done >= names.length) { preloaded = true; setTimeout(cb, 150); }
+        if (done >= names.length && !finished) { finished = true; preloaded = true; setTimeout(cb, 150); }
       };
       im.src = 'img/' + n;
     });
