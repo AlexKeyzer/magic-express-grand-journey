@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -703,6 +704,24 @@ window.ME_ASSETS = {"bg_reg1.jpg":"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ
         cb && cb(ok, r);
       }).catch(function (e) { cb && cb(false, e); });
     },
+    /* ---- rewarded video (VK Ads) with event-based reward tracking ---- */
+    rewarded: function (onDone) {
+      var settled = false, off = function () {};
+      function done(ok) { if (settled) return; settled = true; off(); onDone && onDone(ok); }
+      function h(e) {
+        var d = e.data;
+        if (typeof d === 'string') { try { d = JSON.parse(d); } catch (x) { return; } }
+        var t = (d && d.type) || '';
+        if (/reward/i.test(t)) { done(true); return; }
+        if (/adclosed|adfailed|adhide|adclosed/i.test(t)) done(false);
+      }
+      window.addEventListener('message', h);
+      off = function () { window.removeEventListener('message', h); };
+      send('VKWebAppShowRewardedAd', {})
+        .catch(function () { return send('showRewardedAd', {}); })
+        .catch(function () { done(false); });
+      setTimeout(function () { done(false); }, 60000);   /* safety: no hang ever */
+    },
     /* ---- cloud storage ---- */
     storageGet: function (key, cb) {
       send('VKWebAppStorageGet', { keys: [key] }).then(function (r) {
@@ -983,7 +1002,7 @@ window.MEI18N = {
     combo: 'КОМБО', cascade: 'КАСКАД',
     expReward: 'Награда', expClaimed: 'Получено',
     hcRun: 'Забег', hcLvl: 'Уровень забега',
-    adFallback: 'Реклама недоступна — награда выдана бесплатно',
+    adFallback: 'Реклама недоступна — награда выдана бесплатно', adClosed: 'Награда выдаётся за полный просмотр рекламы',
     settings_saved: 'Сохранено в облако', settings_local: 'Сохранено локально'
   },
   en: {
@@ -1096,7 +1115,7 @@ window.MEI18N = {
     combo: 'COMBO', cascade: 'CASCADE',
     expReward: 'Reward', expClaimed: 'Claimed',
     hcRun: 'Run', hcLvl: 'Run level',
-    adFallback: 'Ads unavailable — reward granted for free',
+    adFallback: 'Ads unavailable — reward granted for free', adClosed: 'The reward is granted for watching the ad to the end',
     settings_saved: 'Saved to cloud', settings_local: 'Saved locally'
   }
 };
@@ -3462,7 +3481,7 @@ window.MEI18N = {
     btns2.appendChild(UI.pill(T('buy'), function () { openChestFlow('c', price); }));
     if (window.MESDK.supports('rewarded')) {
       btns2.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + T('open'), function () {
-        ME.rewarded(function () { openChestFlow('c', 0); });
+        ME.rewarded(function (ok) { if (ok) openChestFlow('c', 0); });
       }, 'ghost'));
     }
     buy.appendChild(btns2);
@@ -3750,10 +3769,17 @@ window.MEI18N = {
     audio: window.MEaudio,
     ui: UI,
     rewarded: function (cb) {
+      if (window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK()) {
+        window.VKSDK.rewarded(function (ok) {
+          if (!ok) { UI.toast(ME.txt('adClosed')); cb && cb(false); return; }
+          cb && cb(true);
+        });
+        return;
+      }
       window.MESDK.rewarded(function (real) {
         if (!real) UI.toast(ME.txt('adFallback'));
-        cb && cb();
-      }, function () { UI.toast(ME.txt('adFallback')); cb && cb(); });
+        cb && cb(true, !real);
+      }, function () { UI.toast(ME.txt('adFallback')); cb && cb(true, true); });
     },
     openMap: function () { window.MEScreens.map(); UI.show('map'); },
     fxOn: function () { return !!(window.MEState && window.MEState.S.settings.fx); },
@@ -4268,9 +4294,9 @@ window.MEI18N = {
         if (souvMsg && souvMsg.id != null) box.appendChild(el('div', 'res-sub', ME.txt('new_souv') + ': ' + ME.txt('souvNames')[souvMsg.id]));
         if (souvMsg && souvMsg.dup) box.appendChild(el('div', 'res-sub', ME.txt('duplicate') + ' +' + souvMsg.coins));
         var row = el('div', 'row');
-        if (window.MESDK.supports('rewarded')) row.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + ME.txt('double_coins'), function () {
+        if (window.MESDK.supports('rewarded') || (window.VKSDK && window.VKSDK.inVK())) row.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + ME.txt('double_coins'), function () {
           row.children[0].disabled = true;
-          ME.rewarded(function () { ST.addCoins(coins); ME.audio.sfx.coin(); var cn2 = box.querySelector('.res-coins .cn'); if (cn2) cn2.textContent = '+' + (coins * 2); });
+          ME.rewarded(function (ok) { if (!ok) { row.children[0].disabled = false; return; } ST.addCoins(coins); ME.audio.sfx.coin(); var cn2 = box.querySelector('.res-coins .cn'); if (cn2) cn2.textContent = '+' + (coins * 2); });
         }, 'ghost')); else row.appendChild(el('span'));
         if (G.hardcore) {
           row.appendChild(UI.pill(ME.txt('next'), function () { p.close(); G.run++; ME.startLevel(Math.min(240, 100 + G.run * 4), { hardcore: true, run: G.run }); }));
@@ -4291,7 +4317,7 @@ window.MEI18N = {
         row2.appendChild(UI.pill(ME.txt('continue_q').split(' ')[0] + ' · ' + contCost, function () {
           if (canFree) { ST.S.daily.freeContinue = D.dayKey(); continueRun(p); }
           else if (ST.spend(contCost)) continueRun(p);
-          else ME.rewarded(function () { continueRun(p); });
+          else ME.rewarded(function (ok) { if (ok) continueRun(p); });
         }));
         row2.appendChild(UI.pill(ME.txt('retry'), function () { p.close(); ME.startLevel(G.lvl, { hardcore: G.hardcore, run: G.run }); }));
         row2.appendChild(UI.pill(ME.txt('menu'), function () { p.close(); exitToMenu(); }));
