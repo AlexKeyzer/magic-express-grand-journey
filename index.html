@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.15-e">
+<meta name="build" content="2026.10.16-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -568,6 +568,7 @@ html, body {
   #scr-game { max-width: 760px; }
   #hud-top, #hud-bot { max-width: 760px; }
 }
+.dim.odds { font-size: 10px; opacity: .8; }
 
 </style>
 
@@ -1116,6 +1117,9 @@ window.MEI18N = {
       'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона', 'Собрать сувениры региона',
       '100 побед уровней', '500 побед уровней', 'Каскад 10 за ход', 'Стрик побед 30', '1000+ очков в Режиме Проводника', '100 заказов пассажиров', 'Отреставрировать все 18 вагонов', 'Собрать все 48 сувениров'],
     chest: 'Сундук', chestPrice: 'Цена', chestDrops: 'Выпадают артефакты-сувениры',
+    chestOddsN: 'Шансы: обычный 62% · редкий 28% · эпический 8% · легендарный 2%',
+    chestOddsE: 'Шансы: эпический 70% · легендарный 30%',
+    payFail: 'Покупка не удалась. Проверьте настройки магазина или попробуйте позже.',
     trophyTitle: 'ДОМАШНИЙ ПОЕЗД', trophy: 'Трофеи', trophyLocked: 'Ещё не добыт',
     shop: 'Магазин', vkOnly: 'Покупки за голоса доступны в игре, открытой внутри VK.',
     shopNote: 'Цены в голосах VK. Покупка зачисляется сразу и навсегда.',
@@ -1231,6 +1235,9 @@ window.MEI18N = {
       'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set', 'Complete the region souvenir set',
       'Win 100 levels', 'Win 500 levels', 'Cascade of 10 in one move', 'Win streak 30', 'Score 1000+ in Conductor Mode', 'Complete 100 passenger orders', 'Restore all 18 cars', 'Collect all 48 souvenirs'],
     chest: 'Chest', chestPrice: 'Price', chestDrops: 'Drops: souvenir artifacts',
+    chestOddsN: 'Odds: common 62% · rare 28% · epic 8% · legendary 2%',
+    chestOddsE: 'Odds: epic 70% · legendary 30%',
+    payFail: 'Purchase failed. Check the store settings or try again later.',
     trophyTitle: 'TROPHY TRAIN', trophy: 'Trophies', trophyLocked: 'Not earned yet',
     shop: 'Shop', vkOnly: 'Votes purchases work when the game is opened inside VK.',
     shopNote: 'Prices in VK votes. Purchases are granted instantly and forever.',
@@ -2128,8 +2135,7 @@ window.MEI18N = {
   };
   Board.prototype.swapMakes = function (r1, c1, r2, c2) {
     var a = this.grid[r1][c1], b = this.grid[r2][c2];
-    if (a.sp === 'orb' || b.sp === 'orb') return true;   /* orb activates on any swap */
-    if (a.sp || b.sp) { /* line/bomb only swap when they form a match, exactly like trySwap */ }
+    if (a.sp || b.sp) return true;   /* any special activates on any adjacent swap */
     var tmp = a.t; a.t = b.t; b.t = tmp;
     var ok = this.runsAt(r1, c1) || this.runsAt(r2, c2);
     b.t = a.t; a.t = tmp;
@@ -2202,8 +2208,8 @@ window.MEI18N = {
     var lul = a.lug; a.lug = b.lug; b.lug = lul;   /* luggage never swappable, kept for safety */
     this.addStep({ type: 'swap', a: { r: r1, c: c1 }, b: { r: r2, c: c2 } });
     var runs = this.findRuns();
-    var orbSwap = (a.sp === 'orb' || b.sp === 'orb');
-    if (runs.length === 0 && !orbSwap) {
+    var anySp = !!(a.sp || b.sp);
+    if (runs.length === 0 && !anySp) {
       var t2 = a.t; a.t = b.t; b.t = t2;
       var sp2 = a.sp; a.sp = b.sp; b.sp = sp2;
       this.addStep({ type: 'swapback', a: { r: r1, c: c1 }, b: { r: r2, c: c2 } });
@@ -2211,9 +2217,9 @@ window.MEI18N = {
     }
     this.moves--;
     this.moveCount++;
-    if (orbSwap) {
-      if (a.sp === 'orb') this.fireOrb(r1, c1, b.t >= 0 ? b.t : this.rt());
-      if (b.sp === 'orb') this.fireOrb(r2, c2, a.t >= 0 ? a.t : this.rt());
+    if (anySp) {
+      if (a.sp) this.fireSpecialAt(r1, c1, b.t);
+      if (b.sp) this.fireSpecialAt(r2, c2, a.t);
     }
     this.resolve();
     this.endOfMove();
@@ -2296,13 +2302,52 @@ window.MEI18N = {
     return out.filter(ok);
   };
 
-  Board.prototype.fireOrb = function (r, c, targetT) {
-    var self = this, cells = [];
-    for (var y = 0; y < this.rows; y++) for (var x = 0; x < this.cols; x++) if (this.grid[y][x].t === targetT) cells.push({ r: y, c: x });
-    cells.push({ r: r, c: c });
-    this.addStep({ type: 'specialFire', kind: 'orb', cells: cells });
+  Board.prototype.fireOrb = function (r, c, targetT) { return this.fireSpecialAt(r, c, targetT); };
+  Board.prototype.mostCommonType = function () {
+    var cnt = {};
+    for (var r = 0; r < this.rows; r++) for (var c = 0; c < this.cols; c++) {
+      var t = this.grid[r][c].t; if (t >= 0) cnt[t] = (cnt[t] || 0) + 1;
+    }
+    var best = 0, bv = -1;
+    for (var k in cnt) if (cnt[k] > bv) { bv = cnt[k]; best = +k; }
+    return best;
+  };
+  /* fire any special at (r,c): line clears its row/col, bomb 3x3, orb the partner color
+     (or the most common color on double-tap). Costs nothing by itself — the CALLER
+     decides whether a move is spent (swap & double-tap both spend one). */
+  Board.prototype.fireSpecialAt = function (r, c, partnerT) {
+    var cl = this.at(r, c);
+    if (!cl || !cl.sp) return null;
+    var kind = cl.sp, cells, i;
+    if (kind === 'orb') {
+      var tt = (partnerT != null && partnerT >= 0) ? partnerT : this.mostCommonType();
+      cells = [];
+      for (var y = 0; y < this.rows; y++) for (var x = 0; x < this.cols; x++)
+        if (this.grid[y][x].t === tt && !(y === r && x === c)) cells.push({ r: y, c: x });
+      cells.push({ r: r, c: c });
+    } else {
+      cells = this.specialCells(r, c, kind);
+      var has = false;
+      for (i = 0; i < cells.length; i++) if (cells[i].r === r && cells[i].c === c) has = true;
+      if (!has) cells.push({ r: r, c: c });
+    }
+    this.addStep({ type: 'specialFire', kind: kind, cells: cells });
     this.applyClear(cells, 1, []);
     this.addStep(this.gravityStep());
+    return cells;
+  };
+  /* double-tap on a special: activates it and spends one move */
+  Board.prototype.tapFire = function (r, c) {
+    if (this.over) return null;
+    var cl = this.at(r, c);
+    if (!cl || !cl.sp) return null;
+    this.steps = [];
+    this.moves--; this.moveCount++;
+    this.addStep({ type: 'tapfire', r: r, c: c });
+    this.fireSpecialAt(r, c, null);
+    this.resolve();
+    this.endOfMove();
+    return this.steps;
   };
 
   Board.prototype.applyClear = function (cells, cascade, specials) {
@@ -2524,6 +2569,8 @@ window.MEI18N = {
     var t = a.t; a.t = b.t; b.t = t; var sp = a.sp; a.sp = b.sp; b.sp = sp;
     this.addStep({ type: 'swap', a: { r: r1, c: c1 }, b: { r: r2, c: c2 } });
     this.moves--; this.moveCount++;
+    if (a.sp) this.fireSpecialAt(r1, c1, b.t);
+    if (b.sp) this.fireSpecialAt(r2, c2, a.t);
     this.resolve(); this.endOfMove();
     return { ok: true, steps: this.steps };
   };
@@ -2783,6 +2830,11 @@ window.MEI18N = {
         setTimeout(function () { self.nextStep(); }, 140); break;
       case 'whistle': this.doWhistle(s); setTimeout(function () { self.nextStep(); }, 260); break;
       case 'specialFire': this.doSpecialFire(s); setTimeout(function () { self.nextStep(); }, 160); break;
+      case 'tapfire':
+        ME.audio.sfx.tap();
+        this.parts.push({ x: this.px(s.c) + this.cell / 2, y: this.py(s.r) + this.cell / 2, vx: 0, vy: 0, life: .5, t: 0, ring: true, r: this.cell * .8, col: '#ffe9a8', rot: 0, vr: 0 });
+        this.burst(this.px(s.c) + this.cell / 2, this.py(s.r) + this.cell / 2, '#ffe9a8', 10);
+        setTimeout(function () { self.nextStep(); }, 160); break;
       case 'hammer': this.burst(this.px(s.c) + this.cell / 2, this.py(s.r) + this.cell / 2, '#ffd970', 16); this.addShake(6); setTimeout(function () { self.nextStep(); }, 140); break;
       case 'cascade': this.floatText(this.W / 2, this.H / 2, (ME.txt('cascade') + ' x' + s.n), '#ffe9a8', 30); ME.audio.sfx.cascade(s.n); setTimeout(function () { self.nextStep(); }, 240); break;
       case 'whistleReady': this.floatText(this.W / 2, this.H * 0.3, ME.txt('whistle') + '!', '#ffe9a8', 28); this.addFlash('#ffe9a8'); setTimeout(function () { self.nextStep(); }, 200); break;
@@ -3760,6 +3812,7 @@ window.MEI18N = {
     mid2.appendChild(el('div', 'car-name', T('chest')));
     mid2.appendChild(el('div', 'dim', T('chestPrice') + ': ' + price));
     mid2.appendChild(el('div', 'dim drops', '◆ ' + T('chestDrops')));
+    mid2.appendChild(el('div', 'dim odds', T('chestOddsN')));
     buy.appendChild(mid2);
     var btns2 = el('div', 'cc-btn');
     btns2.appendChild(UI.pill(T('buy'), function () { openChestFlow('c', price); }));
@@ -3778,6 +3831,7 @@ window.MEI18N = {
     mid3.appendChild(el('div', 'car-name', T('epic_chest')));
     mid3.appendChild(el('div', 'dim', T('exp_title')));
     mid3.appendChild(el('div', 'dim drops', '◆ ' + T('chestDrops')));
+    mid3.appendChild(el('div', 'dim odds', T('chestOddsE')));
     epic.appendChild(mid3);
     var btns3 = el('div', 'cc-btn');
     btns3.appendChild(UI.pill(T('expedition'), function () { SC.exp(); UI.show('exp'); }, 'ghost'));
@@ -3948,7 +4002,7 @@ window.MEI18N = {
       btns.appendChild(UI.pill(it.votes + ' ★', function () {
         if (!window.VKSDK || !window.VKSDK.inVK()) { UI.info(T('shop'), '<div class="center">' + T('vkOnly') + '</div>'); return; }
         window.VKSDK.purchase(it.id, function (ok) {
-          if (!ok) return;
+          if (!ok) { console.warn('[ME] purchase failed', it.id); UI.toast(ME.txt('payFail')); return; }
           window.MESDK.event('purchase', { item: it.id, votes: it.votes });
           var rws = it.grant();
           ST.save(true);
@@ -4039,7 +4093,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.15-e',
+    build: '2026.10.16-a',
     L: 'en',
     txt: function (k) {
       var d = window.MEI18N[ME.L] || window.MEI18N.en;
@@ -4462,6 +4516,11 @@ window.MEI18N = {
         doSwap(ca, { r: ca.r + dir.r, c: ca.c + dir.c });
         sel = null; ren.selA = null;
       } else {
+        /* double-tap on a special: fire it, spends one move */
+        if (sel && sel.r === ca.r && sel.c === ca.c) {
+          var stf = G.board.tapFire(ca.r, ca.c);
+          if (stf) { sel = null; ren.selA = null; updateHUD(); playSteps(stf); return; }
+        }
         /* tap-tap */
         if (sel && Math.abs(sel.r - ca.r) + Math.abs(sel.c - ca.c) === 1) {
           doSwap(sel, ca); sel = null; ren.selA = null;
