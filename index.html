@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.15-b">
+<meta name="build" content="2026.10.15-c">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -1050,6 +1050,7 @@ window.MEI18N = {
     tip_whistle: 'Каскады заряжают гудок. Тапни гудок, затем клетку — крест очистится!',
     tip_swap: 'Меняй фигуры тапом-тап или свайпом',
     tip_order: 'Заказ пассажира: собери фигуры цели за бонусные монеты',
+    shapeNote: 'Фигурное поле: клетки с шестерёнками — декор, они вне игры',
     cars: ['Паровоз', 'Угольный', 'Вагон-Ресторан', 'Спальный', 'Библиотека', 'Оранжерея',
       'Музыкальный', 'Панорамный', 'Багажный', 'Почтовый', 'Арт-Вагон', 'Золотой Вагон',
       'Мастерская', 'Обсерватория', 'Вагон-Банк', 'Депо-Склад', 'Медвагон', 'Радиоузел'],
@@ -1167,6 +1168,7 @@ window.MEI18N = {
     tip_whistle: 'Cascades charge the whistle. Tap whistle, then a cell — cross clears!',
     tip_swap: 'Swap pieces by tap-tap or swipe',
     tip_order: 'Passenger order: collect target pieces for bonus coins',
+    shapeNote: 'Shaped board: gear cells are decor, they are out of play',
     cars: ['Locomotive', 'Coal Car', 'Dining Car', 'Sleeper', 'Library', 'Greenhouse',
       'Music Car', 'Panorama Car', 'Baggage Car', 'Mail Car', 'Art Car', 'Golden Car'],
     perks: ['+1 whistle charge at level start', '+10% coins from levels', '1 free booster daily',
@@ -1744,7 +1746,7 @@ window.MEI18N = {
       settings: { mute: false, music: true, fx: true },
       hcBoard: [],                  /* local leaderboard fallback */
       seenIntro: false,
-      tut: 0, tut2: 0, btip: {}, regCeleb: {}, expSeen: 0, orderSeen: 0,
+      tut: 0, tut2: 0, btip: {}, regCeleb: {}, expSeen: 0, orderSeen: 0, shapeSeen: 0,
       regionBonus: {}
     };
   }
@@ -2990,7 +2992,24 @@ window.MEI18N = {
     /* cells */
     for (var r = 0; r < b.rows; r++) for (var c = 0; c < b.cols; c++) {
       var cl = VG[r][c], v = this.view[r][c];
-      if (cl.hole) continue;
+      if (cl.hole) {   /* decorative machinery cut-out: clearly out of play */
+        var hx2 = this.px(c) + this.cell / 2, hy2 = this.py(r) + this.cell / 2, hr2 = this.cell * 0.30;
+        cx.save(); cx.globalAlpha = 0.5;
+        cx.fillStyle = 'rgba(10,8,20,0.55)';
+        cx.beginPath(); cx.arc(hx2, hy2, hr2, 0, 7); cx.fill();
+        cx.strokeStyle = 'rgba(232,200,90,0.5)'; cx.lineWidth = 3;
+        for (var g2 = 0; g2 < 6; g2++) {
+          var a2 = g2 * Math.PI / 3 + this.t * 0.15;
+          cx.beginPath();
+          cx.moveTo(hx2 + Math.cos(a2) * hr2 * 0.75, hy2 + Math.sin(a2) * hr2 * 0.75);
+          cx.lineTo(hx2 + Math.cos(a2) * hr2 * 1.15, hy2 + Math.sin(a2) * hr2 * 1.15);
+          cx.stroke();
+        }
+        cx.beginPath(); cx.arc(hx2, hy2, hr2 * 0.35, 0, 7); cx.stroke();
+        cx.restore();
+        continue;
+      }
+
       v.sc += (1 - v.sc) * Math.min(1, dt * 12);
       v.pop = Math.max(0, v.pop - dt * 5);
       var x = this.px(c) + v.dx, y = this.py(r) + v.dy;
@@ -2998,6 +3017,16 @@ window.MEI18N = {
       var sc = v.sc * (1 + v.pop * 0.25);
       var dw = cs * sc, dx = x + pad + (cs - dw) / 2, dy = y + pad + (cs - dw) / 2;
       if (!this.playing) dy += Math.sin(this.t * 1.7 + (r * 7 + c) * 0.63) * 1.3;   /* idle bob */
+      if (cl.t < 0 && !cl.sp && !cl.blk) {   /* impossible-state guard: never show an empty socket */
+        this._stray = (this._stray || 0) + 1;
+        if (this._stray <= 3) console.warn('[ME] stray cell', r, c, 'build', window.ME && ME.build);
+        window.__strayLog = (window.__strayLog || 0) + 1;
+        var sw = this.cell - pad * 2;
+        cx.save(); cx.fillStyle = (this.palette && this.palette[0]) || '#888';
+        cx.beginPath(); cx.roundRect(x + pad + sw * .12, y + pad + sw * .12, sw * .76, sw * .76, sw * .2); cx.fill();
+        cx.strokeStyle = '#2e2018'; cx.lineWidth = 3; cx.stroke(); cx.restore();
+        continue;
+      }
       if (cl.t >= 0 || cl.blk) {   /* soft contact shadow */
         cx.save(); cx.fillStyle = 'rgba(20,12,6,0.22)';
         cx.beginPath(); cx.ellipse(dx + dw / 2, dy + dw * 0.95, dw * 0.36, dw * 0.10, 0, 0, 7); cx.fill(); cx.restore();
@@ -3793,7 +3822,7 @@ window.MEI18N = {
       UI.confirm(T('reset_q'), function () { ST.reset(); location.reload(); }, 'YES');
     }, 'danger'));
     s.appendChild(wrap);
-    s.appendChild(el('div', 'ver', 'Magic Express: Grand Journey v1.0'));
+    s.appendChild(el('div', 'ver', 'Magic Express: Grand Journey · build ' + (ME.build || 'dev')));
   };
 
   /* ================= EXPEDITION ================= */
@@ -3961,7 +3990,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.13-f',
+    build: '2026.10.15-c',
     L: 'en',
     txt: function (k) {
       var d = window.MEI18N[ME.L] || window.MEI18N.en;
@@ -4138,6 +4167,10 @@ window.MEI18N = {
   function beginPlay() {
     window.MESDK.gameplayStart();
     window.MESDK.event('level_start', { lvl: G.lvl, hardcore: !!G.hardcore });
+    if (G.cfg.mask && !ST.S.shapeSeen) {
+      ST.S.shapeSeen = 1; ST.save();
+      setTimeout(function () { UI.toast(ME.txt('shapeNote')); }, 900);
+    }
     if (G.order && !ST.S.orderSeen) {
       ST.S.orderSeen = 1; ST.save();
       setTimeout(function () { UI.info(ME.txt('order'), '<div class="center">' + ME.txt('orderHelp') + '</div>'); }, 900);
