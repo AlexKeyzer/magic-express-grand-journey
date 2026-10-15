@@ -3,6 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta name="build" content="2026.10.15-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -3043,10 +3044,22 @@ window.MEI18N = {
         if (!(cl.dark && !cl.lit)) {
           var spr = cl.sp ? { lineH: 'spec_line.png', lineV: 'spec_line.png', bomb: 'spec_bomb.png', orb: 'spec_orb.png' }[cl.sp] : null;
           if (spr) {
-            this.drawSpr(spr, dx, dy, dw, 1);
-            if (cl.sp === 'lineV') { cx.save(); cx.translate(dx + dw / 2, dy + dw / 2); cx.rotate(Math.PI / 2); cx.drawImage(img('spec_line.png'), -dw / 2, -dw / 2, dw, dw); cx.restore(); }
+            var simg = img(spr);
+            if (simg.complete && simg.naturalWidth) {
+              this.drawSpr(spr, dx, dy, dw, 1);
+              if (cl.sp === 'lineV') { cx.save(); cx.translate(dx + dw / 2, dy + dw / 2); cx.rotate(Math.PI / 2); var li = img('spec_line.png'); if (li.complete) cx.drawImage(li, -dw / 2, -dw / 2, dw, dw); cx.restore(); }
+            } else {   /* never look empty: glowing placeholder while decoding */
+              cx.save(); cx.fillStyle = '#ffe9a8'; cx.globalAlpha = .85;
+              cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * .34, 0, 7); cx.fill(); cx.restore();
+            }
           } else {
-            var pim = tintedPiece(cl.t, this.palette[cl.t]); if (pim) this.cx.drawImage(pim, dx, dy, dw, dw);
+            var pim = tintedPiece(cl.t, this.palette[cl.t]);
+            if (pim && pim.complete && pim.naturalWidth) this.cx.drawImage(pim, dx, dy, dw, dw);
+            else {   /* asset not decoded yet: colored token instead of empty socket */
+              cx.save(); cx.fillStyle = this.palette[cl.t] || '#888';
+              cx.beginPath(); cx.roundRect(dx + dw * .12, dy + dw * .12, dw * .76, dw * .76, dw * .2); cx.fill();
+              cx.strokeStyle = '#2e2018'; cx.lineWidth = 3; cx.stroke(); cx.restore();
+            }
             var gph = (this.t + r * 0.37 + c * 0.61) % 2.8;
             if (gph < 0.3) {   /* travelling glint sparkle */
               var ga2 = Math.sin(gph / 0.3 * Math.PI);
@@ -4661,6 +4674,7 @@ window.MEI18N = {
 
   function boot() {
     window.__stage = 'boot';
+    try { console.log('%cMagic Express build ' + ME.build, 'color:#ffe9a8;background:#33241a;padding:2px 8px;border-radius:4px'); } catch (e) {}
     UI.init();
     if (window.VKSDK) { window.VKSDK.init(); ME.vkLoadSave(); }
     ST.load();
