@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -3901,7 +3902,7 @@ window.MEI18N = {
   /* ================= diagnostics: visible boot stages & error panel ================= */
   window.__stage = 'scripts';
   (function () {
-    if (!window.CanvasRenderingContext2D.prototype.roundRect) {
+    if (window.CanvasRenderingContext2D && !window.CanvasRenderingContext2D.prototype.roundRect) {
       window.CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
         r = Math.min(r || 0, w / 2, h / 2);
         this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
