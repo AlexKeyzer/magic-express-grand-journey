@@ -136,7 +136,7 @@ html, body {
 .order-tag { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 13px; color: #fff; }
 .o-av { width: 34px; height: 34px; }
 #board-wrap { flex: 1; position: relative; min-height: 0; }
-#board-wrap::before { content: ''; position: absolute; inset: 2px; border-radius: 22px; background: linear-gradient(rgba(18,24,56,.30), rgba(18,24,56,.16)); border: 2px solid rgba(255,255,255,.38); box-shadow: inset 0 2px 18px rgba(10,6,30,.28), 0 10px 30px rgba(10,6,30,.25); }
+#board-wrap::before { content: none; }
 #board { position: absolute; inset: 0; touch-action: none; }
 .boss-tag { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 6px 12px; font-size: 12px; z-index: 3; }
 .boss-ic { width: 40px; height: 40px; }
@@ -551,6 +551,8 @@ html, body {
 .menu-bar { padding: clamp(5px, 1vh, 10px) 12px; font-size: clamp(12px, 1.9vh, 16px); margin-top: clamp(4px, .9vh, 8px); }
 .menu-train img { width: min(60vw, 300px); }
 @media (max-height: 700px) { .menu-train { display: none; } }
+.shape-mini { display: block; margin: 4px auto 2px; background: rgba(12,16,40,.4); border-radius: 8px; padding: 4px; width: 92px; height: 104px; }
+.shape-wrap { margin-top: 4px; }
 
 </style>
 
@@ -1018,7 +1020,8 @@ window.MEI18N = {
     daily_chest: 'Дейлик-сундук', streak: 'Стрик', days: 'дн.',
     tokens: 'Токены', epic_chest: 'Эпический сундук', week_left: 'До конца недели',
     no_moves: 'Ходов нет — шффл!', shuffle_auto: 'Поле перемешано',
-    order: 'Заказ пассажира', order_done: 'Заказ выполнен!', orders: 'Заказы', carFixedBanner: 'ВАГОН ПОЧИНЕН!',
+    order: 'Заказ пассажира', order_done: 'Заказ выполнен!', orders: 'Заказы',
+    orderHelp: 'Пассажир просит собрать за уровень несколько фигур нужного типа — они показаны на плашке сверху рядом с его портретом. Выполните заказ — получите +15 монет (с Панорамным вагоном ×2). Заказ не мешает основной цели уровня и появляется начиная с 6-го уровня.', carFixedBanner: 'ВАГОН ПОЧИНЕН!',
     achievement: 'Достижение!', new_souv: 'Новый сувенир!', duplicate: 'Дубликат',
     region_done: 'Регион собран!', bonus: 'бонус',
     hc_desc: 'Бесконечный забег: без бустеров, одна попытка. Рекорд попадает в лидерборд.',
@@ -1134,7 +1137,8 @@ window.MEI18N = {
     daily_chest: 'Daily chest', streak: 'Streak', days: 'd.',
     tokens: 'Tokens', epic_chest: 'Epic chest', week_left: 'Week ends in',
     no_moves: 'No moves — shuffle!', shuffle_auto: 'Board shuffled',
-    order: 'Passenger order', order_done: 'Order complete!', orders: 'Orders', carFixedBanner: 'CAR RESTORED!',
+    order: 'Passenger order', order_done: 'Order complete!', orders: 'Orders',
+    orderHelp: 'A passenger asks you to collect several pieces of one type during the level — see the tag with their portrait at the top. Complete it to earn +15 coins (×2 with the Panorama car). The order never blocks the main level goal and appears from level 6 onward.', carFixedBanner: 'CAR RESTORED!',
     achievement: 'Achievement!', new_souv: 'New souvenir!', duplicate: 'Duplicate',
     region_done: 'Region complete!', bonus: 'bonus',
     hc_desc: 'Endless run: no boosters, one attempt. Score goes to the leaderboard.',
@@ -1719,7 +1723,7 @@ window.MEI18N = {
       settings: { mute: false, music: true, fx: true },
       hcBoard: [],                  /* local leaderboard fallback */
       seenIntro: false,
-      tut: 0, tut2: 0, btip: {}, regCeleb: {}, expSeen: 0,
+      tut: 0, tut2: 0, btip: {}, regCeleb: {}, expSeen: 0, orderSeen: 0,
       regionBonus: {}
     };
   }
@@ -2601,10 +2605,47 @@ window.MEI18N = {
     this.W = w; this.H = h;
     this.cell = Math.min((w - 8) / cols, (h - 8) / rows);
     this.ox = (w - this.cell * cols) / 2; this.oy = (h - this.cell * rows) / 2;
+    if (this.board) this.buildShape();
+  };
+  Renderer.prototype.buildShape = function () {
+    var b = this.board;
+    if (!b) { this.shapeCvs = null; return; }
+    var W = Math.ceil(this.cell * b.cols), H = Math.ceil(this.cell * b.rows);
+    var mask = document.createElement('canvas'); mask.width = W; mask.height = H;
+    var mc = mask.getContext('2d');
+    mc.fillStyle = '#fff';
+    for (var r0 = 0; r0 < b.rows; r0++) for (var c0 = 0; c0 < b.cols; c0++) {
+      if (!b.grid[r0][c0].hole) mc.fillRect(c0 * this.cell, r0 * this.cell, this.cell, this.cell);
+    }
+    function unionOff(pad, col) {
+      var cv = document.createElement('canvas'); cv.width = W + pad * 2; cv.height = H + pad * 2;
+      var cx = cv.getContext('2d'); cx.fillStyle = col;
+      for (var i = -1; i <= 1; i++) for (var j = -1; j <= 1; j++) {
+        if (!i && !j) continue;
+        cx.drawImage(mask, pad + i * pad, pad + j * pad);
+      }
+      cx.drawImage(mask, pad, pad);
+      return cv;
+    }
+    var goldU = unionOff(4, '#e8c85a');
+    var darkU = unionOff(8, '#2e2018');
+    /* rings: cut the inner part out */
+    var gc = goldU.getContext('2d'); gc.globalCompositeOperation = 'destination-out'; gc.drawImage(mask, 4, 4);
+    var dc = darkU.getContext('2d'); dc.globalCompositeOperation = 'destination-out'; dc.drawImage(goldU, 4, 4);
+    var panel = document.createElement('canvas'); panel.width = W; panel.height = H;
+    var pc = panel.getContext('2d');
+    pc.fillStyle = 'rgba(18,24,58,0.30)'; pc.fillRect(0, 0, W, H);
+    pc.globalCompositeOperation = 'destination-in'; pc.drawImage(mask, 0, 0);
+    var shadow = document.createElement('canvas'); shadow.width = W; shadow.height = H;
+    var sc = shadow.getContext('2d');
+    sc.fillStyle = 'rgba(10,6,26,0.45)'; sc.fillRect(0, 0, W, H);
+    sc.globalCompositeOperation = 'destination-in'; sc.drawImage(mask, 0, 0);
+    this.shapeCvs = { dark: darkU, gold: goldU, panel: panel, shadow: shadow, pad4: 4, pad8: 8 };
   };
   Renderer.prototype.setBoard = function (board, palette) {
     this.board = board; this.palette = palette;
     this.vg = board.snap ? board.snap() : board.grid;
+    this.buildShape();
     this.view = [];
     for (var r = 0; r < board.rows; r++) {
       this.view.push([]);
@@ -2855,19 +2896,20 @@ window.MEI18N = {
     }
     /* board frame + checker */
     var bx = this.ox - 6, by = this.oy - 6, bw2 = this.cell * b.cols + 12, bh2 = this.cell * b.rows + 12;
-    cx.save();
-    cx.fillStyle = 'rgba(16,20,48,0.22)';
-    cx.beginPath(); cx.roundRect(bx, by, bw2, bh2, 22); cx.fill();
+    if (this.shapeCvs) {
+      var SH = this.shapeCvs;
+      cx.save();
+      cx.drawImage(SH.shadow, this.ox, this.oy + 7);
+      cx.drawImage(SH.dark, this.ox - SH.pad8, this.oy - SH.pad8);
+      cx.drawImage(SH.gold, this.ox - SH.pad4, this.oy - SH.pad4);
+      cx.drawImage(SH.panel, this.ox, this.oy);
+      cx.restore();
+    }
     for (var cr = 0; cr < b.rows; cr++) for (var cc2 = 0; cc2 < b.cols; cc2++) {
       if (VG[cr][cc2].hole) continue;
       cx.fillStyle = 'rgba(12,16,40,0.14)';
       cx.beginPath(); cx.roundRect(this.px(cc2) + 3, this.py(cr) + 3, this.cell - 6, this.cell - 6, 12); cx.fill();
     }
-    cx.strokeStyle = this.palette ? this.palette[0] : '#ffe9a8'; cx.lineWidth = 4; cx.globalAlpha = .8;
-    cx.beginPath(); cx.roundRect(bx, by, bw2, bh2, 22); cx.stroke();
-    cx.globalAlpha = 1; cx.strokeStyle = '#2e2018'; cx.lineWidth = 3;
-    cx.beginPath(); cx.roundRect(bx - 3, by - 3, bw2 + 6, bh2 + 6, 25); cx.stroke();
-    cx.restore();
     /* rail stripes */
     if (VG[0][1] && VG[0][1].rail) {
       cx.fillStyle = 'rgba(255,233,168,0.10)';
@@ -3999,8 +4041,8 @@ window.MEI18N = {
     };
     var board = new window.MEBoard(cfg, perks);
     var order = null;
-    if (!opts.hardcore) {
-      var pax = (lvl * 7) % 20;
+    if (!opts.hardcore && lvl > 5) {   /* no passenger orders during the first 5 levels */
+      var pax = (lvl * 7) % 28;
       ME.curPax = pax;
       order = { pax: pax, t: Math.floor(Math.random() * cfg.colors), n: 10 + (lvl % 7), got: 0, reward: Math.round(D.ECO.orderReward * (ST.perk('orderX2') ? 2 : 1) * (ST.perk('radio') ? 1.25 : 1)) };
     }
@@ -4041,6 +4083,10 @@ window.MEI18N = {
   function beginPlay() {
     window.MESDK.gameplayStart();
     window.MESDK.event('level_start', { lvl: G.lvl, hardcore: !!G.hardcore });
+    if (G.order && !ST.S.orderSeen) {
+      ST.S.orderSeen = 1; ST.save();
+      setTimeout(function () { UI.info(ME.txt('order'), '<div class="center">' + ME.txt('orderHelp') + '</div>'); }, 900);
+    }
     if (G.lvl === 1 && !ST.S.tut && !G.hardcore) {
       var hm = findHintMove();
       if (hm) {
@@ -4065,6 +4111,18 @@ window.MEI18N = {
     UI.popup(function (box, p) {
       box.appendChild(el('div', 'p-title', ME.txt('level') + ' ' + G.lvl + (G.cfg.boss ? ' · ' + ME.txt('boss') : '')));
       box.appendChild(el('div', 'res-sub', ME.txt('regions')[D.regionOf(G.lvl) - 1] + (G.cfg.boss ? ' — ' + bossName(G.cfg.boss, G.lvl) : '') + ' · ' + ME.txt('chapter') + ' ' + D.regionOf(G.lvl)));
+      if (G.cfg.mask) {
+        var mc2 = document.createElement('canvas');
+        mc2.width = 84; mc2.height = 96; mc2.className = 'shape-mini';
+        var mx = mc2.getContext('2d');
+        for (var mr = 0; mr < 8; mr++) for (var mcx = 0; mcx < 7; mcx++) {
+          if (G.cfg.mask[mr] && G.cfg.mask[mr][mcx] === '0') continue;
+          mx.fillStyle = 'rgba(255,233,168,.85)';
+          mx.fillRect(mcx * 12 + 1, mr * 12 + 1, 10, 10);
+        }
+        box.appendChild(el('div', 'shape-wrap', '<div class="dim center">' + (ME.L === 'ru' ? 'форма поля' : 'board shape') + '</div>'));
+        box.appendChild(mc2);
+      }
       var row = el('div', 'goals-row');
       b.goals.forEach(function (g) {
         var chip = el('div', 'goal-big glass');
@@ -4129,7 +4187,7 @@ window.MEI18N = {
       var o = el('div', 'glass order-tag');
       o.id = 'order-tag';
       o.innerHTML = '<img src="img/passenger_' + String(G.order.pax + 1).padStart(2, '0') + '.png" class="o-av"><span id="order-txt"></span>';
-      o.onclick = function () { UI.toast(ME.txt('tip_order')); };
+      o.onclick = function () { UI.info(ME.txt('order'), '<div class="center">' + ME.txt('orderHelp') + '</div>'); };
       top.appendChild(o);
     }
     /* bottom: whistle + boosters */
@@ -4633,5 +4691,3 @@ window.MEI18N = {
 </script>
 </body>
 </html>
-
-    
