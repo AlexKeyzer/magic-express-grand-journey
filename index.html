@@ -740,7 +740,28 @@ window.ME_ASSETS = null;
     advertise: function () { return !!bridge(); }
   };
   window.VKSDK = VK;
-  if (inIframe()) send('VKWebAppInit').catch(function () {});   /* asap, before assets load */
+  /* VK's injected connector may appear AFTER our first init attempt:
+     retry init on a schedule and re-send once the official bridge shows up */
+  function fireInit() { send('VKWebAppInit').catch(function () {}); }
+  if (inIframe()) {
+    fireInit();                                   /* asap */
+    var t0 = Date.now();
+    var iv = setInterval(function () {
+      if (VK._initAck || Date.now() - t0 > 20000) { clearInterval(iv); return; }
+      fireInit();
+    }, 700);
+    window.addEventListener('message', function onMsg(e) {
+      var d = e.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
+      if (d && (d.type === 'vk-connect-result' || /VKWebApp/.test(d.type || ''))) { VK._initAck = true; }
+    });
+    var bw = setInterval(function () {            /* official bridge appeared late? re-init through it */
+      if (bridge()) { clearInterval(bw); fireInit(); fireInit(); }
+      if (Date.now() - t0 > 20000) clearInterval(bw);
+    }, 250);
+    document.addEventListener('DOMContentLoaded', fireInit);
+    window.addEventListener('load', fireInit);
+  }
 })();
 
 /* ============================================================
@@ -3826,6 +3847,7 @@ window.MEI18N = {
       };
     }
     window.__errs = [];
+    window.__debug = /debug=1/.test(location.search);
     function push(msg) {
       window.__errs.push(String(msg).slice(0, 300));
       var d = document.getElementById('diag');
@@ -3868,6 +3890,11 @@ window.MEI18N = {
         var pr = done / names.length;
         if (bar) bar.style.width = (pr * 100) + '%';
         if (pct) pct.textContent = Math.round(pr * 100) + '%';
+        if (window.__debug) {
+          var dg2 = document.getElementById('diag');
+          if (!dg2) { dg2 = document.createElement('div'); dg2.id = 'diag'; dg2.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:999;max-width:96vw;background:#0a2a0aee;color:#d0ffd0;font:12px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap'; document.body.appendChild(dg2); }
+          dg2.textContent = 'STAGE: ' + window.__stage + ' | assets ' + done + '/' + names.length + (window.__errs.length ? '\nERR: ' + window.__errs[0] : '');
+        }
         if (done >= names.length && !finished) { finished = true; preloaded = true; setTimeout(cb, 150); }
       };
       im.src = 'img/' + n;
