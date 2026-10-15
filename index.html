@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2e4a7a">
+<title>Магический Экспресс: Большое Путешествие / Magic Express: Grand Journey</title>
+<link rel="preload" as="image" href="img/logo.png">
+<link rel="stylesheet" href="css/style.css">
+<!-- GamePush SDK (optional): the game works without it / with adblock -->
+<script defer src="https://gamepush.com/sdk/game-push-sdk.js" onerror="window.__gpFail=1"></script>
+<script defer src="https://unpkg.com/@vkbridge/bridge/dist/browser/index.js" onerror="window.__vkFail=1"></script>
+</head>
+<body>
+<div id="bg"></div>
+<div id="app">
+  <div class="screen" id="scr-menu"></div>
+  <div class="screen" id="scr-map"></div>
+  <div class="screen" id="scr-game">
+    <div id="hud-top"></div>
+    <div id="board-wrap"></div>
+    <div id="hud-bot"></div>
+  </div>
+  <div class="screen" id="scr-train"></div>
+  <div class="screen" id="scr-album"></div>
+  <div class="screen" id="scr-pax"></div>
+  <div class="screen" id="scr-chests"></div>
+  <div class="screen" id="scr-quests"></div>
+  <div class="screen" id="scr-settings"></div>
+  <div class="screen" id="scr-exp"></div>
+  <div class="screen" id="scr-hc"></div>
+</div>
+<div id="popups"></div>
+<div id="toasts"></div>
+<div id="banner"></div>
+<div id="loader">
+  <img src="img/logo.png" class="load-logo" alt="logo">
+  <div class="load-track"><div id="load-bar"></div></div>
+  <div id="load-pct">0%</div>
+</div>
+<script src="js/vk.js"></script>
+<script src="js/sdk.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/state.js"></script>
+<script src="js/board.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/screens.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
