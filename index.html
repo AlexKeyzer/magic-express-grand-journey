@@ -1345,12 +1345,8 @@ window.MEI18N = {
     var wave = Math.sin(t * Math.PI * 4) * 0.07;
     var diff = 0.3 + t * 0.7 + (reg - 1) * 0.04 + tier * 0.06 + wave;
 
-    var maskName = 'full';
+    var maskName = 'full';   /* shaped boards disabled by design: every cell is playable, no cut-outs ever */
     var boss = isBoss(lvl) ? bossOf(lvl) : 0;
-    if (!boss && lvl > 6) {
-      var pool = MASK_POOLS[reg];
-      maskName = pool[lvl % pool.length];
-    }
     var cfg = {
       id: lvl, reg: reg, cols: 7, rows: 8,
       mask: boss ? null : (MASKS[maskName] || null), maskName: boss ? 'full' : maskName,
@@ -3027,6 +3023,12 @@ window.MEI18N = {
         cx.strokeStyle = '#2e2018'; cx.lineWidth = 3; cx.stroke(); cx.restore();
         continue;
       }
+      if (cl.t < 0 && !cl.sp && !cl.blk && this.playing) {   /* shimmer: a piece is about to land here */
+        cx.save(); cx.globalAlpha = 0.35 + 0.25 * Math.sin(this.t * 10 + r + c);
+        cx.strokeStyle = '#ffe9a8'; cx.lineWidth = 2;
+        cx.beginPath(); cx.arc(this.px(c) + this.cell / 2, this.py(r) + this.cell / 2, this.cell * 0.22, 0, 7); cx.stroke();
+        cx.restore();
+      }
       if (cl.t >= 0 || cl.blk) {   /* soft contact shadow */
         cx.save(); cx.fillStyle = 'rgba(20,12,6,0.22)';
         cx.beginPath(); cx.ellipse(dx + dw / 2, dy + dw * 0.95, dw * 0.36, dw * 0.10, 0, 0, 7); cx.fill(); cx.restore();
@@ -3990,7 +3992,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.15-c',
+    build: '2026.10.15-d',
     L: 'en',
     txt: function (k) {
       var d = window.MEI18N[ME.L] || window.MEI18N.en;
