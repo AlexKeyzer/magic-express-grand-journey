@@ -539,6 +539,19 @@ html, body {
 @media (max-height: 760px) { .bell { top: 8px; right: 12px; font-size: 28px; } .bell img { width: 38px; height: 38px; } }
 .head .pill.small { min-width: 44px; }
 
+/* ============ v12: compact menu for VK window ============ */
+#scr-menu { padding: 8px; gap: 2px; }
+#scr-menu .logo { width: clamp(84px, 21vh, 230px); }
+.menu-title { font-size: clamp(17px, 3.4vh, 36px); }
+.menu-sub { font-size: clamp(10px, 1.7vh, 16px); margin-bottom: clamp(2px, .6vh, 8px); }
+.menu-col { gap: clamp(3px, .9vh, 8px); width: min(92vw, 400px); }
+.menu-col .pill { padding: clamp(6px, 1.2vh, 14px) 12px; font-size: clamp(11px, 1.9vh, 19px); }
+.menu-col .pill.big { padding: clamp(8px, 1.6vh, 18px) 18px; font-size: clamp(13px, 2.3vh, 22px); }
+.menu-col .row { gap: clamp(4px, .9vh, 8px); margin-top: 0; }
+.menu-bar { padding: clamp(5px, 1vh, 10px) 12px; font-size: clamp(12px, 1.9vh, 16px); margin-top: clamp(4px, .9vh, 8px); }
+.menu-train img { width: min(60vw, 300px); }
+@media (max-height: 700px) { .menu-train { display: none; } }
+
 </style>
 
 <script>
@@ -741,6 +754,7 @@ window.ME_ASSETS = null;
     loadBridge(function (br) {
       if (br) {
         VK.vkBridge = br;
+        if (VK._wantBanner && !VK._inGame && !VK._bannerOn) { VK._bannerOn = true; send('VKWebAppShowBannerAd', { placement: 'bottom' }).catch(function () { VK._bannerOn = false; }); }
         fireInit(); fireInit();                        /* through official protocol */
         try {
           if (br.subscribe) br.subscribe(function (ev) {
@@ -762,13 +776,21 @@ window.ME_ASSETS = null;
     send('VKWebAppSetViewSettings', { status_bar_style: 'dark', action_bar_color: '#000000' }).catch(function () {});
   };
 
-  /* ---------- banner ads ---------- */
+  /* ---------- banner ads (queued until the official bridge is up) ---------- */
+  VK.setInGame = function (inGame) {
+    VK._inGame = !!inGame;
+    if (VK._inGame) VK.hideBanner();
+    else if (VK._wantBanner) VK.showBanner();
+  };
   VK.showBanner = function () {
-    if (VK._bannerOn) return;
+    VK._wantBanner = true;
+    if (VK._inGame || VK._bannerOn) return;
+    if (!offBridge()) return;                    /* fires as soon as the bridge loads */
     VK._bannerOn = true;
     send('VKWebAppShowBannerAd', { placement: 'bottom' }).catch(function () { VK._bannerOn = false; });
   };
   VK.hideBanner = function () {
+    VK._wantBanner = false;
     if (!VK._bannerOn) return;
     VK._bannerOn = false;
     send('VKWebAppHideBannerAd').catch(function () {});
@@ -3062,7 +3084,7 @@ window.MEI18N = {
     },
     /* ---------- screens ---------- */
     show: function (id) {
-      if (window.VKSDK) { if (id === 'game') window.VKSDK.hideBanner(); else window.VKSDK.showBanner(); }
+      if (window.VKSDK) { window.VKSDK.setInGame(id === 'game'); if (id !== 'game') window.VKSDK.showBanner(); }
       var olds = document.querySelectorAll('.screen.on');
       for (var i = 0; i < olds.length; i++) olds[i].classList.remove('on');
       var s = $('scr-' + id);
@@ -3295,7 +3317,7 @@ window.MEI18N = {
       '<img src="img/ui_star.png" class="bar-ic"><span id="menu-stars">' + totalStars() + '</span>' +
       '<img src="img/ui_glass.png" class="bar-ic hide"><span id="menu-lvl">' + T('level') + ' ' + ST.S.lvl + '/' + D.TOTAL + '</span>';
     s.appendChild(bar);
-    s.appendChild(el('div', 'menu-ver', 'build ' + (ME.build || 'dev')));
+
     if (ST.S.daily.chestTaken !== D.dayKey()) {
       var bell = el('div', 'bell', '<img src="img/chest_closed.png" alt="">');
       bell.onclick = function () { SC.chests(); UI.show('chests'); };
@@ -4611,3 +4633,5 @@ window.MEI18N = {
 </script>
 </body>
 </html>
+
+    
