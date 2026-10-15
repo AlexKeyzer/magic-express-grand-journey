@@ -554,6 +554,20 @@ html, body {
 .shape-mini { display: block; margin: 4px auto 2px; background: rgba(12,16,40,.4); border-radius: 8px; padding: 4px; width: 92px; height: 104px; }
 .shape-wrap { margin-top: 4px; }
 
+/* ============ v15: tidy wide/landscape game column ============ */
+.order-tag { padding: 5px 12px; font-size: 12px; }
+.order-tag .o-av { width: 28px; height: 28px; }
+@media (min-width: 700px) {
+  #scr-game { max-width: 660px; margin: 0 auto; padding: 10px 16px; }
+  #hud-top, #hud-bot { max-width: 660px; margin-left: auto; margin-right: auto; }
+  .hud-glass { padding: 6px 12px; gap: 8px; }
+  #hud-bot { padding-top: 6px; }
+}
+@media (min-width: 700px) and (orientation: landscape) {
+  #scr-game { max-width: 760px; }
+  #hud-top, #hud-bot { max-width: 760px; }
+}
+
 </style>
 
 <script>
@@ -1629,36 +1643,42 @@ window.MEI18N = {
     tap: function () { if (!ensure()) return; tone(700, ctx.currentTime, 0.05, 'sine', 0.2); }
   };
 
-  /* region music: simple looped arpeggio patterns, scale/tempo per region */
-  var SCALES = {
-    1: [0, 2, 4, 7, 9], 2: [0, 2, 3, 7, 8], 3: [0, 2, 4, 6, 9], 4: [0, 3, 5, 7, 10],
-    5: [0, 2, 4, 7, 8], 6: [0, 2, 4, 7, 11], 7: [0, 2, 4, 5, 9], 8: [0, 1, 4, 7, 8]
+  /* region music: public-domain classical themes, lightly re-arranged
+     (chiptune-style voicing, new tempo/hats/pads). All themes PD: Beethoven 1827,
+     Vivaldi 1741, Pachelbel 1706, Grieg 1907, Petzold/Bach 1750, Greensleeves anon,
+     Boccherini 1805, Holst 1934. */
+  var CLASSICS = {
+    1: { t: .34, root: 48, mel: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62, 0] },        /* Ode to Joy */
+    2: { t: .30, root: 57, mel: [76, 76, 76, 73, 76, 76, 76, 73, 78, 78, 78, 74, 78, 78, 78, 74] },        /* Spring (Vivaldi) */
+    3: { t: .38, root: 50, mel: [66, 64, 62, 61, 59, 57, 59, 61, 66, 64, 62, 61, 59, 57, 54, 0] },        /* Canon in D */
+    4: { t: .40, root: 52, mel: [64, 67, 71, 72, 71, 67, 64, 67, 71, 74, 72, 71, 69, 67, 64, 0] },        /* Morning (Grieg) */
+    5: { t: .33, root: 55, mel: [74, 67, 69, 71, 72, 74, 67, 67, 74, 69, 71, 72, 74, 72, 71, 69] },       /* Minuet in G */
+    6: { t: .42, root: 45, mel: [64, 69, 71, 72, 71, 69, 68, 64, 64, 69, 71, 72, 71, 69, 68, 64] },       /* Greensleeves */
+    7: { t: .30, root: 48, mel: [76, 72, 74, 76, 77, 76, 74, 72, 71, 67, 69, 71, 72, 71, 69, 67] },       /* Boccherini Minuet */
+    8: { t: .36, root: 43, mel: [67, 64, 64, 67, 72, 71, 69, 67, 64, 67, 72, 76, 74, 72, 71, 67] }        /* Jupiter (Holst) */
   };
-  var TEMPO = { 1: 0.34, 2: 0.38, 3: 0.4, 4: 0.36, 5: 0.34, 6: 0.46, 7: 0.3, 8: 0.32 };
-  var ROOT = { 1: 220, 2: 196, 3: 246.9, 4: 174.6, 5: 220, 6: 164.8, 7: 261.6, 8: 185 };
+  function mf(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 
   function loopStep() {
     if (!ctx || muted || !musicOn || suspended) return;
-    var sc = SCALES[curRegion] || SCALES[1];
-    var root = ROOT[curRegion] || 220;
+    var C = CLASSICS[curRegion] || CLASSICS[1];
     var t = ctx.currentTime + 0.02;
-    var deg = sc[step % sc.length];
-    var oct = (step % 8 < 4) ? 1 : 2;
-    var f = root * Math.pow(2, deg / 12) * oct;
-    tone(f, t, 0.22, 'triangle', 0.32, musicGain);
-    if (step % 4 === 0) tone(root / 2, t, 0.5, 'sine', 0.4, musicGain);
-    if (step % 8 === 4) tone(root * 0.749, t, 0.45, 'sine', 0.28, musicGain);
-    if (step % 2 === 1) noise(t, 0.04, 0.07, musicGain, 6500 + (curRegion % 3) * 900);   /* hat */
-    if (step % 8 === 0) {   /* warm pad */
-      tone(root * 1.498, t, 1.2, 'triangle', 0.10, musicGain);
-      tone(root * 1.888, t, 1.2, 'triangle', 0.08, musicGain);
+    var n = C.mel[step % C.mel.length];
+    if (n) {
+      tone(mf(n), t, 0.24, 'triangle', 0.30, musicGain);          /* lead voice */
+      tone(mf(n) / 2, t + 0.01, 0.18, 'sine', 0.10, musicGain);   /* soft sub-octave */
     }
-    if (intensity > 0) {   /* cascade excitement layer */
-      tone(f * 2, t + 0.02, 0.1, 'square', 0.10, musicGain);
-      if (step % 2 === 0) tone(root * 2, t, 0.14, 'triangle', 0.14, musicGain);
+    if (step % 4 === 0) tone(mf(C.root), t, 0.5, 'sine', 0.36, musicGain);          /* bass */
+    if (step % 8 === 4) tone(mf(C.root + 7), t, 0.42, 'sine', 0.26, musicGain);     /* fifth answer */
+    if (step % 2 === 1) noise(t, 0.04, 0.06, musicGain, 6800);                      /* hat */
+    if (step % 16 === 0) {                                                           /* warm pad chord */
+      tone(mf(C.root + 12), t, 1.4, 'triangle', 0.09, musicGain);
+      tone(mf(C.root + 16), t, 1.4, 'triangle', 0.07, musicGain);
+      tone(mf(C.root + 19), t, 1.4, 'triangle', 0.06, musicGain);
     }
+    if (intensity > 0 && n) tone(mf(n + 12), t + 0.06, 0.1, 'square', 0.08, musicGain);  /* cascade layer */
     step++;
-    loopTimer = setTimeout(loopStep, (TEMPO[curRegion] || 0.36) * 1000);
+    loopTimer = setTimeout(loopStep, C.t * 1000);
   }
   function startLoop(region) {
     curRegion = region || curRegion;
