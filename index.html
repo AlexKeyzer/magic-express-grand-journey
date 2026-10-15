@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.15-c">
+<meta name="build" content="2026.10.15-e">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -2240,12 +2240,13 @@ window.MEI18N = {
           if (run.dir === 'h') inH[key] = run; else inV[key] = run;
         }
       });
-      /* specials creation */
+      /* specials creation — a special is a COLORED piece (keeps the run's type),
+         otherwise it is invisible (renderer draws t>=0) and unswappable */
       runs.forEach(function (run) {
-        if (run.n >= 5) specials.push({ r: run.dir === 'h' ? run.r : run.r + 2, c: run.dir === 'h' ? run.c + 2 : run.c, kind: 'orb' });
-        else if (run.n === 4) specials.push({ r: run.dir === 'h' ? run.r : run.r + 1, c: run.dir === 'h' ? run.c + 1 : run.c, kind: run.dir === 'h' ? 'lineH' : 'lineV' });
+        if (run.n >= 5) specials.push({ r: run.dir === 'h' ? run.r : run.r + 2, c: run.dir === 'h' ? run.c + 2 : run.c, kind: 'orb', t: run.t });
+        else if (run.n === 4) specials.push({ r: run.dir === 'h' ? run.r : run.r + 1, c: run.dir === 'h' ? run.c + 1 : run.c, kind: run.dir === 'h' ? 'lineH' : 'lineV', t: run.t });
       });
-      for (var key2 in clear) { if (inH[key2] && inV[key2]) specials.push({ r: +key2.split(',')[0], c: +key2.split(',')[1], kind: 'bomb' }); }
+      for (var key2 in clear) { if (inH[key2] && inV[key2]) specials.push({ r: +key2.split(',')[0], c: +key2.split(',')[1], kind: 'bomb', t: inH[key2].t }); }
       /* chain-trigger specials caught in clear */
       var queue = [];
       for (var k in clear) {
@@ -2347,17 +2348,19 @@ window.MEI18N = {
         if (nb.amber > 0) { nb.amber--; self.goalHit('amber', 1); self.amberDmg = self.amberDmg || []; self.amberDmg.push({ r: nr, c: nc, v: nb.amber }); }
       });
     });
-    /* specials to spawn (on now-empty cells) */
+    /* specials to spawn (on now-empty cells) — always with a real color type */
     specials.forEach(function (s) {
       if (s.fired) return;
       var cl2 = self.grid[s.r][s.c];
-      cl2.t = -1; cl2.sp = s.kind; cl2.chain = 0; cl2.amber = 0;
+      cl2.t = (s.t != null && s.t >= 0) ? s.t : self.rt();
+      cl2.sp = s.kind; cl2.chain = 0; cl2.amber = 0;
       self.specialsMade++;
     });
     /* apply neighbor block damage */
     var dmgList = [];
     for (var k in dmg) {
       var pp = k.split(','), nb2 = this.grid[+pp[0]][+pp[1]];
+      if (!nb2 || !nb2.blk) continue;   /* blocker already destroyed by the direct clear */
       nb2.blk.hp -= dmg[k];
       if (nb2.blk.hp <= 0) { this.goalHit(nb2.blk.k, 1); if (nb2.blk.k === 'crow') { nb2.blk = null; } else { nb2.blk = null; } }
       dmgList.push({ r: +pp[0], c: +pp[1], hp: nb2.blk ? nb2.blk.hp : 0, dead: !nb2.blk });
@@ -2909,6 +2912,36 @@ window.MEI18N = {
     this.addShake(5);
   };
 
+  /* ---------- idle reconciliation ----------
+     Every idle frame the visual grid is hard-synced with the authoritative
+     engine grid: a visual hole can never outlive the cascade that made it. */
+  Renderer.prototype.reconcile = function () {
+    var b = this.board;
+    if (!b || !b.grid || !this.vg || this.playing || this.queue.length) return;
+    var healed = 0;
+    for (var r = 0; r < b.rows; r++) for (var c = 0; c < b.cols; c++) {
+      var e = b.grid[r][c], v = this.vg[r][c];
+      if (!v) continue;
+      var eb = e.blk, vb = v.blk;
+      if (e.t !== v.t || (e.sp || null) !== (v.sp || null) ||
+        (eb ? eb.k : null) !== (vb ? vb.k : null) || (eb ? eb.hp : 0) !== (vb ? vb.hp : 0) ||
+        e.ice !== v.ice || e.honey !== v.honey || e.chain !== v.chain || e.amber !== v.amber ||
+        e.lit !== v.lit || !!e.lug !== !!v.lug || e.dark !== v.dark || e.aurora !== v.aurora ||
+        e.belt !== v.belt || e.portal !== v.portal || e.hole !== v.hole) {
+        this.vg[r][c] = { t: e.t, sp: e.sp, ice: e.ice, chain: e.chain, amber: e.amber, honey: e.honey,
+          lug: e.lug, blk: eb ? { k: eb.k, hp: eb.hp } : null, dark: e.dark, lit: e.lit,
+          aurora: e.aurora, rail: e.rail, hole: e.hole, belt: e.belt, portal: e.portal };
+        var vw = this.view && this.view[r] && this.view[r][c];
+        if (vw && (e.t >= 0 || e.sp) && !(v.t >= 0 || v.sp)) { vw.pop = 1; vw.sc = 0.55; }   /* pop-in */
+        healed++;
+      }
+    }
+    if (healed) {
+      window.__reconLog = (window.__reconLog || 0) + healed;
+      if (!this._reconWarned) { this._reconWarned = 1; console.warn('[ME] reconcile healed ' + healed + ' cell(s), build ' + (window.ME && ME.build)); }
+    }
+  };
+
   /* ---------- draw ---------- */
   Renderer.prototype.draw = function (dt) {
     var cx = this.cx, b = this.board;
@@ -3013,23 +3046,26 @@ window.MEI18N = {
       var sc = v.sc * (1 + v.pop * 0.25);
       var dw = cs * sc, dx = x + pad + (cs - dw) / 2, dy = y + pad + (cs - dw) / 2;
       if (!this.playing) dy += Math.sin(this.t * 1.7 + (r * 7 + c) * 0.63) * 1.3;   /* idle bob */
-      if (cl.t < 0 && !cl.sp && !cl.blk) {   /* impossible-state guard: never show an empty socket */
-        this._stray = (this._stray || 0) + 1;
-        if (this._stray <= 3) console.warn('[ME] stray cell', r, c, 'build', window.ME && ME.build);
-        window.__strayLog = (window.__strayLog || 0) + 1;
-        var sw = this.cell - pad * 2;
-        cx.save(); cx.fillStyle = (this.palette && this.palette[0]) || '#888';
-        cx.beginPath(); cx.roundRect(x + pad + sw * .12, y + pad + sw * .12, sw * .76, sw * .76, sw * .2); cx.fill();
-        cx.strokeStyle = '#2e2018'; cx.lineWidth = 3; cx.stroke(); cx.restore();
+      if (cl.t < 0 && !cl.sp && !cl.blk) {   /* empty socket */
+        if (this.playing || this.queue.length) {
+          /* transient cascade state: a piece is about to land here */
+          cx.save(); cx.globalAlpha = 0.35 + 0.25 * Math.sin(this.t * 10 + r + c);
+          cx.strokeStyle = '#ffe9a8'; cx.lineWidth = 2;
+          cx.beginPath(); cx.arc(this.px(c) + this.cell / 2, this.py(r) + this.cell / 2, this.cell * 0.22, 0, 7); cx.stroke();
+          cx.restore();
+        } else {
+          /* idle empty socket = impossible state: make it visible, reconcile() will heal it */
+          this._stray = (this._stray || 0) + 1;
+          if (this._stray <= 3) console.warn('[ME] stray cell', r, c, 'build', window.ME && ME.build);
+          window.__strayLog = (window.__strayLog || 0) + 1;
+          var sw = this.cell - pad * 2;
+          cx.save(); cx.fillStyle = (this.palette && this.palette[0]) || '#888';
+          cx.beginPath(); cx.roundRect(x + pad + sw * .12, y + pad + sw * .12, sw * .76, sw * .76, sw * .2); cx.fill();
+          cx.strokeStyle = '#2e2018'; cx.lineWidth = 3; cx.stroke(); cx.restore();
+        }
         continue;
       }
-      if (cl.t < 0 && !cl.sp && !cl.blk && this.playing) {   /* shimmer: a piece is about to land here */
-        cx.save(); cx.globalAlpha = 0.35 + 0.25 * Math.sin(this.t * 10 + r + c);
-        cx.strokeStyle = '#ffe9a8'; cx.lineWidth = 2;
-        cx.beginPath(); cx.arc(this.px(c) + this.cell / 2, this.py(r) + this.cell / 2, this.cell * 0.22, 0, 7); cx.stroke();
-        cx.restore();
-      }
-      if (cl.t >= 0 || cl.blk) {   /* soft contact shadow */
+      if (cl.t >= 0 || cl.blk || cl.sp) {   /* soft contact shadow */
         cx.save(); cx.fillStyle = 'rgba(20,12,6,0.22)';
         cx.beginPath(); cx.ellipse(dx + dw / 2, dy + dw * 0.95, dw * 0.36, dw * 0.10, 0, 0, 7); cx.fill(); cx.restore();
       }
@@ -3071,7 +3107,7 @@ window.MEI18N = {
         this.drawSpr(bn, dx, dy, dw, 1);
         if (cl.blk.k === 'coal') { cx.fillStyle = '#2a2a32'; cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * 0.3, 0, 7); cx.fill(); }
         if (cl.blk.k === 'crow') { cx.fillStyle = '#2a2a34'; cx.beginPath(); cx.ellipse(dx + dw / 2, dy + dw / 2, dw * 0.3, dw * 0.22, 0, 0, 7); cx.fill(); cx.fillStyle = '#e8952a'; cx.beginPath(); cx.moveTo(dx + dw * .68, dy + dw * .45); cx.lineTo(dx + dw * .9, dy + dw * .52); cx.lineTo(dx + dw * .68, dy + dw * .6); cx.fill(); }
-      } else if (cl.t >= 0) {
+      } else if (cl.t >= 0 || cl.sp) {
         if (!(cl.dark && !cl.lit)) {
           var spr = cl.sp ? { lineH: 'spec_line.png', lineV: 'spec_line.png', bomb: 'spec_bomb.png', orb: 'spec_orb.png' }[cl.sp] : null;
           if (spr) {
@@ -3080,15 +3116,26 @@ window.MEI18N = {
             cx.strokeStyle = 'rgba(255,233,168,.85)'; cx.lineWidth = 3; cx.setLineDash([10, 7]);
             cx.beginPath(); cx.arc(0, 0, dw * 0.46, 0, 7); cx.stroke();
             cx.setLineDash([]); cx.restore();
+            /* color ring: specials match & swap by their color — make it readable */
+            var ringCol = (cl.t >= 0 && this.palette && this.palette[cl.t]) || '#ffe9a8';
+            cx.save();
+            cx.strokeStyle = 'rgba(20,12,6,0.65)'; cx.lineWidth = 7;
+            cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * 0.42, 0, 7); cx.stroke();
+            cx.strokeStyle = ringCol; cx.lineWidth = 4.5;
+            cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * 0.42, 0, 7); cx.stroke();
+            cx.restore();
             var simg = img(spr);
             if (simg.complete && simg.naturalWidth) {
               this.drawSpr(spr, dx, dy, dw, 1);
               if (cl.sp === 'lineV') { cx.save(); cx.translate(dx + dw / 2, dy + dw / 2); cx.rotate(Math.PI / 2); var li = img('spec_line.png'); if (li.complete) cx.drawImage(li, -dw / 2, -dw / 2, dw, dw); cx.restore(); }
-            } else {   /* never look empty: glowing placeholder while decoding */
-              cx.save(); cx.fillStyle = '#ffe9a8'; cx.globalAlpha = .85;
-              cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * .34, 0, 7); cx.fill(); cx.restore();
+            } else {   /* never look empty: colored placeholder while decoding */
+              cx.save(); cx.fillStyle = ringCol; cx.globalAlpha = .85;
+              cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * .34, 0, 7); cx.fill();
+              cx.strokeStyle = 'rgba(255,255,255,.9)'; cx.lineWidth = 3;
+              cx.beginPath(); cx.arc(dx + dw / 2, dy + dw / 2, dw * .18, 0, 7); cx.stroke();
+              cx.restore();
             }
-          } else {
+          } else if (cl.t >= 0) {
             var pim = tintedPiece(cl.t, this.palette[cl.t]);
             if (pim && pim.complete && pim.naturalWidth) this.cx.drawImage(pim, dx, dy, dw, dw);
             else {   /* asset not decoded yet: colored token instead of empty socket */
@@ -3992,7 +4039,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.15-d',
+    build: '2026.10.15-e',
     L: 'en',
     txt: function (k) {
       var d = window.MEI18N[ME.L] || window.MEI18N.en;
@@ -4141,6 +4188,7 @@ window.MEI18N = {
 
   ME.startLevel = function (lvl, opts) {
     G = newSession(lvl, opts);
+    ME._G = G;   /* debug hook: console → ME._G.board / ME._G.ren */
     enterGameScreen();
     /* intro dialog at region start / boss */
     var reg = D.regionOf(lvl);
@@ -4362,6 +4410,18 @@ window.MEI18N = {
       if (!a || G.paused || G.over || (G.ren && G.ren.playing)) return;
       var ca = cellAt(a.x, a.y);
       if (!ca) return;
+      /* silent black box: if the player taps a visually empty cell, record everything */
+      try {
+        var vcl = ren.vg && ren.vg[ca.r] && ren.vg[ca.r][ca.c];
+        var ecl = G.board.grid[ca.r] && G.board.grid[ca.r][ca.c];
+        if (vcl && vcl.t < 0 && !vcl.sp && !vcl.blk && !vcl.hole) {
+          window.__emptyTaps = window.__emptyTaps || [];
+          window.__emptyTaps.push({ r: ca.r, c: ca.c, build: ME.build, lvl: G.lvl,
+            eng: ecl ? { t: ecl.t, sp: ecl.sp, blk: ecl.blk && ecl.blk.k, hole: ecl.hole } : null,
+            queue: ren.queue.length, stray: window.__strayLog || 0, stall: window.__stallLog || 0, recon: window.__reconLog || 0 });
+          if (window.__emptyTaps.length <= 3) console.warn('[ME] empty tap', JSON.stringify(window.__emptyTaps[window.__emptyTaps.length - 1]));
+        }
+      } catch (e) {}
       /* whistle targeting */
       if (ren.whistleArm && G.board.charges > 0) {
         ren.whistleArm = false;
@@ -4625,6 +4685,7 @@ window.MEI18N = {
   }
   function exitToMenu() {
     G = null;
+    ME._G = null;
     window.MEScreens.menu(); UI.show('menu');
   }
 
@@ -4687,11 +4748,36 @@ window.MEI18N = {
 
   /* ---------- main loop ---------- */
   var lastT = 0;
+  var stallSig = null, stallT = 0;
   function loop(t) {
     requestAnimationFrame(loop);
     var dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
     lastT = t;
-    if (G && G.ren && UI.screen === 'game') G.ren.draw(dt);
+    if (G && G.ren && UI.screen === 'game') {
+      var ren = G.ren;
+      /* stall watchdog: a frozen step chain must never leave the board
+         stuck mid-cascade with holes; after 2.5s of zero progress we
+         fast-forward to the engine's final state and unlock input */
+      if (ren.playing) {
+        var sig = ren.queue.length + ':' + (ren.queue[0] ? ren.queue[0].type : '-');
+        if (sig !== stallSig) { stallSig = sig; stallT = t; }
+        else if (t - stallT > 2500) {
+          try {
+            console.warn('[ME] watchdog: flushing stalled steps (' + sig + '), build ' + ME.build);
+            window.__stallLog = (window.__stallLog || 0) + 1;
+            ren.queue.length = 0;
+            ren.playing = false;
+            if (G.board && G.board.snap) ren.vg = G.board.snap();
+            for (var vr = 0; ren.view && vr < ren.view.length; vr++)
+              for (var vc = 0; vc < ren.view[vr].length; vc++) { ren.view[vr][vc].dx = 0; ren.view[vr][vc].dy = 0; }
+            var od = ren.onDone; ren.onDone = null; stallSig = null;
+            od && od();
+          } catch (e) { console.warn('[ME] watchdog error', e); }
+        }
+      } else stallSig = null;
+      if (ren.reconcile) ren.reconcile();
+      ren.draw(dt);
+    }
   }
 
   /* ---------- boot ---------- */
