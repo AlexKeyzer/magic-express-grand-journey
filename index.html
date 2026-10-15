@@ -2594,6 +2594,15 @@ window.MEI18N = {
     this.endOfMove();
     return this.steps;
   };
+  Board.prototype.fillStray = function () {
+    var ch = false;
+    for (var r = 0; r < this.rows; r++) for (var c = 0; c < this.cols; c++) {
+      var cl = this.grid[r][c];
+      if (!cl.blk && !cl.hole && cl.t < 0 && !cl.sp) { cl.t = this.rt(); ch = true; }
+    }
+    if (ch) this.addStep({ type: 'aurora' });
+    return ch;
+  };
   Board.prototype.doShuffle = function () { this.steps = []; this.shuffle(); return this.steps; };
   Board.prototype.addMoves = function (n) { this.moves += n; this.movesTotal += n; if (this.over && !this.win) { this.over = false; } };
 
@@ -4398,6 +4407,7 @@ window.MEI18N = {
   /* ---------- resolve / win / lose ---------- */
   function afterResolve() {
     var b = G.board;
+    b.fillStray();          /* quadruple safety: no empty cell can ever survive */
     if (b.cascadeMax >= 3) ME.audio.kick(2200);
     /* order progress */
     if (G.order) {
