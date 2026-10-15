@@ -3044,6 +3044,11 @@ window.MEI18N = {
         if (!(cl.dark && !cl.lit)) {
           var spr = cl.sp ? { lineH: 'spec_line.png', lineV: 'spec_line.png', bomb: 'spec_bomb.png', orb: 'spec_orb.png' }[cl.sp] : null;
           if (spr) {
+            /* procedural aura: special cell is visible even if every asset fails */
+            cx.save(); cx.translate(dx + dw / 2, dy + dw / 2); cx.rotate(this.t * 1.5);
+            cx.strokeStyle = 'rgba(255,233,168,.85)'; cx.lineWidth = 3; cx.setLineDash([10, 7]);
+            cx.beginPath(); cx.arc(0, 0, dw * 0.46, 0, 7); cx.stroke();
+            cx.setLineDash([]); cx.restore();
             var simg = img(spr);
             if (simg.complete && simg.naturalWidth) {
               this.drawSpr(spr, dx, dy, dw, 1);
@@ -4034,7 +4039,7 @@ window.MEI18N = {
         d.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:999;max-width:96vw;max-height:40vh;overflow:auto;background:#2a0a0aee;color:#ffd0d0;font:12px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap';
         document.body && document.body.appendChild(d);
       }
-      d.textContent = 'BOOT STAGE: ' + (window.__stage || '?') + '\n' + window.__errs.slice(0, 4).join('\n') + '\n(пришлите скриншот разработчику)';
+      d.textContent = 'BUILD ' + (window.ME && window.ME.build || '?') + ' | BOOT STAGE: ' + (window.__stage || '?') + '\n' + window.__errs.slice(0, 4).join('\n') + '\n(пришлите скриншот разработчику)';
     }
     window.addEventListener('error', function (e) { push(e.message + ' @' + (e.filename || '').slice(-30) + ':' + e.lineno); });
     window.addEventListener('unhandledrejection', function (e) { push('promise: ' + (e.reason && e.reason.message || e.reason)); });
@@ -4071,7 +4076,7 @@ window.MEI18N = {
         if (window.__debug) {
           var dg2 = document.getElementById('diag');
           if (!dg2) { dg2 = document.createElement('div'); dg2.id = 'diag'; dg2.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:999;max-width:96vw;background:#0a2a0aee;color:#d0ffd0;font:12px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap'; document.body.appendChild(dg2); }
-          dg2.textContent = 'STAGE: ' + window.__stage + ' | assets ' + done + '/' + names.length + (window.__errs.length ? '\nERR: ' + window.__errs[0] : '');
+          dg2.textContent = 'BUILD ' + ME.build + ' | STAGE: ' + window.__stage + ' | assets ' + done + '/' + names.length + (window.__errs.length ? '\nERR: ' + window.__errs[0] : '');
         }
         if (done >= names.length && !finished) { finished = true; preloaded = true; setTimeout(cb, 150); }
       };
@@ -4690,7 +4695,13 @@ window.MEI18N = {
     window.__stage = 'preload';
     preload(function () {
       window.__stage = 'menu';
-      var dg = document.getElementById('diag'); if (dg && window.__errs.length === 0) dg.remove();
+      if (window.__debug) {
+        var dgp = document.getElementById('diag');
+        if (!dgp) { dgp = document.createElement('div'); dgp.id = 'diag'; dgp.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:999;background:#0a2a0aee;color:#d0ffd0;font:12px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap'; document.body.appendChild(dgp); }
+        dgp.textContent = 'BUILD ' + ME.build + ' | STAGE: menu | assets ok';
+      }
+      var dg = document.getElementById('diag');
+      if (dg && window.__errs.length === 0 && !window.__debug) dg.remove();   /* with ?debug=1 the panel stays as a build marker */
       $('loader').classList.add('gone');
       window.MESDK.gameStart();           /* GameReady — once, after assets */
       window.MEScreens.menu();
