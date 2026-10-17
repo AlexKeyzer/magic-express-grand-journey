@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.16-a">
+<meta name="build" content="2026.10.17-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -512,6 +512,11 @@ html, body {
 /* ============ v9: no overlap on short screens ============ */
 #scr-menu { justify-content: center; justify-content: safe center; overflow-y: auto; padding: 10px; }
 #scr-menu .logo { flex: 0 0 auto; }
+@media (max-height: 700px) {
+  .chest-row { padding: 8px 10px; }
+  .chest-row .chest-img { width: 56px; height: 56px; }
+  .gift-foot .exp-hint { font-size: 10px; line-height: 1.3; }
+}
 @media (max-height: 620px) {
   #scr-menu .logo { width: min(38vw, 190px); }
   .menu-title { font-size: 22px; }
@@ -569,6 +574,68 @@ html, body {
   #hud-top, #hud-bot { max-width: 760px; }
 }
 .dim.odds { font-size: 10px; opacity: .8; }
+
+/* ============ v16: ad-only build — gift center, ad buttons, placeholder ad ============ */
+.ad-left { opacity: .72; font-size: .82em; font-weight: 600; }
+.ad-left-line { font-size: 10px; letter-spacing: .3px; opacity: .82; }
+.pill.ad-btn { animation: adGlow 2.2s ease-in-out infinite; }
+@keyframes adGlow {
+  0%, 100% { box-shadow: 0 4px 0 rgba(58,32,10,.45), 0 0 0 rgba(255,233,168,0) !important; }
+  50%      { box-shadow: 0 4px 0 rgba(58,32,10,.45), 0 0 16px rgba(255,233,168,.6) !important; }
+}
+.chest-row.epic .chest-img { filter: hue-rotate(230deg) saturate(1.4); }
+.gift-foot { flex: 0 0 auto; padding-bottom: 4px; }
+.gift-foot .exp-hint { padding: 2px 14px; }
+/* the scrollable list must be allowed to shrink, otherwise the rows
+   overflow the panel and cover the footer hints on short screens */
+.chest-list { min-height: 0; }
+.gift-foot { min-height: 0; }
+/* rows grow with their text: a fixed min-height let long labels bleed into
+   the neighbouring row, and the default flex-shrink squashed them instead of
+   letting the list scroll — so: no shrink, no min-height, content-sized */
+.chest-row { flex: 0 0 auto; align-items: center; min-height: 0; padding-top: 10px; padding-bottom: 10px; }
+.chest-row .chest-img { align-self: center; }
+.chest-row .cc-btn { max-width: 126px; align-self: center; }
+.chest-row .cc-btn .pill { font-size: 12px; padding: 8px 9px !important; white-space: normal; }
+.chest-row .cc-mid { overflow-wrap: anywhere; }
+.chest-row .cc-mid .dim { line-height: 1.25; }
+.ad-left-line { padding-right: 4px; }
+@media (max-width: 380px) {
+  .chest-row { gap: 9px; padding: 8px 10px; }
+  /* the AD badge would clip the label on narrow phones — the golden glow says it already */
+  .chest-row .cc-btn .ad-tag { display: none; }
+  .gift-foot .exp-hint { font-size: 10px; line-height: 1.3; padding: 2px 8px; }
+  .chest-row .chest-img { width: 58px; height: 58px; }
+  .chest-row .cc-btn { max-width: 104px; }
+  .chest-row .cc-btn .pill { font-size: 11px; padding: 7px 6px !important; }
+}
+/* placeholder ad (standalone builds without an ad SDK) */
+/* sits above #app (z1) but below #popups (z40): dims the game while the popup stays clickable */
+.ad-veil { position: fixed; inset: 0; z-index: 39; background: rgba(6,8,20,.72); pointer-events: none; }
+.fake-ad {
+  position: relative; margin: 6px auto 12px; width: min(320px, 82vw); height: 168px;
+  border-radius: 16px; overflow: hidden;
+  background: linear-gradient(135deg, #2a3a6a, #141a34 60%, #3a2450);
+  border: 2px solid rgba(255,233,168,.35);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+}
+.fake-ad .fa-bars { position: absolute; inset: 0; opacity: .28; }
+.fake-ad .fa-bars i {
+  position: absolute; left: -30%; width: 26%; height: 200%; top: -50%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: rotate(18deg); animation: faSweep 2.6s linear infinite;
+}
+.fake-ad .fa-bars i:nth-child(2) { animation-delay: .8s; }
+.fake-ad .fa-bars i:nth-child(3) { animation-delay: 1.6s; }
+@keyframes faSweep { from { left: -30%; } to { left: 120%; } }
+.fake-ad .fa-count {
+  position: relative; z-index: 2; font: 900 40px/1 Nunito, sans-serif; color: #ffe9a8;
+  text-shadow: 0 3px 0 rgba(0,0,0,.45);
+}
+.fake-ad .fa-note {
+  position: relative; z-index: 2; font-size: 11px; color: rgba(255,255,255,.8);
+  padding: 0 16px; text-align: center; line-height: 1.35;
+}
 
 </style>
 
@@ -841,13 +908,19 @@ window.ME_ASSETS = null;
     send('VKWebAppShowNativeAds', { ad_format: 'interstitial' }).catch(function () {});
   };
 
-  /* ---------- payments (votes) ---------- */
+  /* ---------- payments (votes) ----------
+     ad-only build: purchases are disabled unless ME.monetization === 'iap' */
+  VK.iapOn = function () {
+    try { return !!(window.ME && window.ME.monetization === 'iap'); } catch (e) { return false; }
+  };
   VK.purchase = function (item, cb) {
+    if (!VK.iapOn()) { cb && cb(false); return; }
     send('VKWebAppShowOrderBox', { item: item, type: 'item' })
       .then(function (r) { cb && cb(!!(r && (r.result === true || r.status === 'paid' || r.transactionId))); })
       .catch(function () { cb && cb(false); });
   };
   VK.getBalance = function (cb) {
+    if (!VK.iapOn()) { cb && cb(null); return; }
     send('VKWebAppGetBalance').then(function (r) { cb && cb(r && r.balance != null ? +r.balance : null); }).catch(function () { cb && cb(null); });
   };
 
@@ -1023,7 +1096,7 @@ window.MEI18N = {
     map: 'МАРШРУТ ЭКСПРЕССА', moves: 'ХОДЫ', goals: 'ЦЕЛИ', coins: 'МОНЕТЫ', level: 'УРОВЕНЬ',
     whistle: 'ГУДОК', boss: 'БОСС', station: 'СТАНЦИЯ!', region: 'РЕГИОН',
     win: 'ПОБЕДА!', lose: 'ХОДЫ КОНЧИЛИСЬ', stars: 'Звёзды', reward: 'Награда',
-    continue_q: 'Продолжить за 200?', double_coins: 'Удвоить монеты!', retry: 'ЕЩЁ РАЗ', next: 'ДАЛЬШЕ',
+    continue_q: 'Продолжить за монеты?', double_coins: 'Удвоить монеты!', retry: 'ЕЩЁ РАЗ', next: 'ДАЛЬШЕ',
     menu: 'В МЕНЮ', boost_hammer: 'Молоток', boost_moves: '+5 ходов', boost_shuffle: 'Шффл', boost_glove: 'Перчатка', boost_color: 'Цветозаряд',
     tip_glove: 'Перчатка: выбери любые две фигуры — они поменяются местами!', tip_color: 'Цветозаряд: тапни фигуру — весь её цвет исчезнет!',
     chapter: 'Глава', station: 'Станция',
@@ -1125,6 +1198,27 @@ window.MEI18N = {
     shopNote: 'Цены в голосах VK. Покупка зачисляется сразу и навсегда.',
     shopNames: ['Стартовый набор', 'Мешочек монет', 'Сундук монет', 'Мега-набор коллекционера'],
     shopDescs: ['500 монет + молот ×2 + шффл ×1', '300 монет', '1000 монет', '3000 монет + эпический сувенир'],
+    /* ---- ad-only monetization (gifts instead of a vote shop) ---- */
+    gifts: 'Подарки', giftCenter: 'Центр подарков',
+    adLeftToday: 'Сегодня осталось', adDoneToday: 'На сегодня всё — вернись завтра',
+    adWatch: 'Смотреть', adGet: 'Забрать награду', adSkip: 'Пропустить',
+    adFake: 'Реклама', adFakeNote: 'Внутри VK здесь проигрывается настоящее видео с наградой',
+    adNote: 'Доната нет: награды добываются просмотром короткой рекламы. Лимиты обновляются каждый день.',
+    adCap: 'Максимум за день: {n} монет + бустеры.',
+    adEpicWait: 'До следующего', hours: 'ч', min: 'мин', adFreeLeft: 'бесплатно за рекламу:',
+    continue_ad: 'Бесплатно +5',
+    adNames: {
+      coins: 'Мешочек монет', hammer: 'Молоток в дорогу', moves: 'Запас ходов',
+      big: 'Большой подарок', epic: 'Эпический сундук', chest: 'Бесплатный сундук'
+    },
+    adDescs: {
+      coins: 'Самый частый подарок — смотри видео и получай монеты',
+      hammer: 'Монеты и молоток: сбей любую фигуру на поле',
+      moves: 'Монеты и бустер «+5 ходов»',
+      big: 'Крупная пачка монет и шффл — можно дважды в день',
+      epic: 'Эпический или легендарный сувенир',
+      chest: 'Обычный сундук бесплатно: сувенир + монеты'
+    },
     expHelp: 'Экспедиция недели — это недельный трек наград: за каждую победу уровня вы получаете 1 токен (за босса 3). Токены заполняют трек из 5 ступеней: монеты, бустеры и финальный эпический сундук. В понедельник трек начинается заново. Награды забирай кнопками под ступенями: серая ступень ещё не достигнута, золотая — готова.',
     expHow: 'Токены: победа +1, босс +3. Награды забирай кнопками под ступенями трека.', openFreeAd: 'Открыть за рекламу',
     freeBooster: 'Бесплатный бустер дня', continueFree: 'Бесплатное продолжение дня',
@@ -1144,7 +1238,7 @@ window.MEI18N = {
     map: 'EXPRESS ROUTE', moves: 'MOVES', goals: 'GOALS', coins: 'COINS', level: 'LEVEL',
     whistle: 'WHISTLE', boss: 'BOSS', station: 'STATION!', region: 'REGION',
     win: 'VICTORY!', lose: 'OUT OF MOVES', stars: 'Stars', reward: 'Reward',
-    continue_q: 'Continue for 200?', double_coins: 'Double the coins!', retry: 'RETRY', next: 'NEXT',
+    continue_q: 'Continue for coins?', double_coins: 'Double the coins!', retry: 'RETRY', next: 'NEXT',
     menu: 'MENU', boost_hammer: 'Hammer', boost_moves: '+5 moves', boost_shuffle: 'Shuffle', boost_glove: 'Glove', boost_color: 'Color charge',
     tip_glove: 'Glove: pick any two pieces — they swap places!', tip_color: 'Color charge: tap a piece — all of its color clears!',
     chapter: 'Chapter', station: 'Station',
@@ -1243,6 +1337,27 @@ window.MEI18N = {
     shopNote: 'Prices in VK votes. Purchases are granted instantly and forever.',
     shopNames: ['Starter pack', 'Coin pouch', 'Coin chest', 'Collector mega pack'],
     shopDescs: ['500 coins + hammer ×2 + shuffle ×1', '300 coins', '1000 coins', '3000 coins + epic souvenir'],
+    /* ---- ad-only monetization ---- */
+    gifts: 'Gifts', giftCenter: 'Gift center',
+    adLeftToday: 'Left today', adDoneToday: 'All claimed — come back tomorrow',
+    adWatch: 'Watch', adGet: 'Claim reward', adSkip: 'Skip',
+    adFake: 'Ad', adFakeNote: 'Inside VK a real rewarded video plays here',
+    adNote: 'No in-app purchases: every reward here is earned by watching a short ad. Limits reset daily.',
+    adCap: 'Daily maximum: {n} coins and boosters from ads.',
+    adEpicWait: 'Next one in', hours: 'h', min: 'min', adFreeLeft: 'free via ad:',
+    continue_ad: 'Free +5',
+    adNames: {
+      coins: 'Coin pouch', hammer: 'Hammer for the road', moves: 'Extra moves',
+      big: 'Big gift', epic: 'Epic chest', chest: 'Free chest'
+    },
+    adDescs: {
+      coins: 'The everyday gift — watch a video, get coins',
+      moves: 'Coins plus a "+5 moves" booster',
+      hammer: 'Coins plus a hammer: smash any tile',
+      big: 'A large coin pack and a shuffle — twice a day',
+      epic: 'Epic or legendary souvenir guaranteed',
+      chest: 'A free normal chest: souvenir + coins'
+    },
     expHelp: 'Weekly Expedition is a weekly reward track: every level win grants 1 token (boss wins grant 3). Tokens fill a 5-step track: coins, boosters and a final epic chest. The track restarts every Monday. Claim rewards with the buttons under the steps: grey step not reached yet, golden step ready.',
     expHow: 'Tokens: win +1, boss +3. Claim rewards with the buttons under the track steps.', openFreeAdAd: 'Open via ad',
     freeBooster: 'Free booster of the day', continueFree: 'Free continue of the day',
@@ -1448,6 +1563,30 @@ window.MEI18N = {
     }
   };
 
+  /* ---------- ad-only economy (no IAP / no votes) ----------
+     1 rewarded view ≈ 0.20–0.38 ₽ gross for the developer
+     (VK native 'reward' / rewarded video, RU eCPM 200–380 ₽ per 1000).
+     Anchor: 1 view = 60 coins ≈ one level win (winBase 40 … ~62 with combo).
+     Daily cap of all offers = 1180 coins ≈ +30…40% to a normal day,
+     so ads speed progress up but never replace playing.                  */
+  var AD = {
+    coinsPerView: 60,            /* anchor offer, up to 6 views a day  */
+    dailyCapCoins: 1400,         /* theoretical maximum: all 18 views watched */
+    freeChestAd: 3,              /* free chests per day behind an ad    */
+    doubleWinAd: 4,              /* "double the coins" per day          */
+    continueAd: 3,               /* free continues per day              */
+    epicChestHours: 4            /* epic chest cooldown behind an ad    */
+  };
+  /* id · reward · daily limit · what it grants */
+  var AD_OFFERS = [
+    { id: 'coins',   coins: 60,  perDay: 6, img: 'img/ui_coin.png',      boost: null },
+    { id: 'hammer',  coins: 90,  perDay: 3, img: 'img/ic_hammer.png',    boost: { k: 'hammer', n: 1 } },
+    { id: 'moves',   coins: 90,  perDay: 3, img: 'img/ic_moves.png',     boost: { k: 'moves', n: 1 } },
+    { id: 'big',     coins: 250, perDay: 2, img: 'img/chest_closed.png', boost: { k: 'shuffle', n: 1 } },
+    { id: 'epic',    coins: 0,   perDay: 1, img: 'img/chest_closed.png', souv: 'e' },
+    { id: 'chest',   coins: 0,   perDay: 3, img: 'img/chest_open.png',   chest: 'c' }
+  ];
+
   var CARS = [];
   for (var ci = 0; ci < 18; ci++) CARS.push({ id: ci, steps: 3 });
 
@@ -1561,7 +1700,8 @@ window.MEI18N = {
     PALETTES: PALETTES, MASKS: MASKS, rng: rng, ri: ri,
     TOTAL: TOTAL, CHAPTER: CHAPTER, BOSS_EVERY: BOSS_EVERY,
     regionOf: regionOf, isBoss: isBoss, bossOf: bossOf, bossTier: bossTier,
-    levelCfg: levelCfg, ECO: ECO, CARS: CARS, SOUV: SOUV, souvFile: souvFile, ACH: ACH,
+    levelCfg: levelCfg, ECO: ECO, AD: AD, AD_OFFERS: AD_OFFERS,
+    CARS: CARS, SOUV: SOUV, souvFile: souvFile, ACH: ACH,
     regionComplete: regionComplete, dayKey: dayKey, weekKey: weekKey, makeDailyQuests: makeDailyQuests,
     EXP_STEPS: EXP_STEPS, EXP_REWARDS: EXP_REWARDS, PAX: PAX, TROPHIES: TROPHIES
   };
@@ -1739,11 +1879,13 @@ window.MEI18N = {
       souv: {},                     /* souvId -> count */
       ach: {},
       daily: { date: '', quests: [], streak: 0, lastDay: '', chestTaken: '', freeBooster: '', freeContinue: '' },
+      ads: { day: '', used: {}, lastEpic: 0 },
       week: { id: '', tokens: 0, claimed: [] },
       stats: {
         wins: 0, fails: 0, maxLevel: 0, bossWins: 0, orders: 0, cascade8: 0,
         bestStreak: 0, streak: 0, bestLevelCoins: 0, hcRuns: 0, hcBest: 0,
-        specials: 0, whistles: 0, levelsPlayed: 0, coinsTotal: 0, cascade10: 0, bossEnc: 0, belts: 0, portals: 0
+        specials: 0, whistles: 0, levelsPlayed: 0, coinsTotal: 0, cascade10: 0, bossEnc: 0, belts: 0, portals: 0,
+        adViews: 0, adCoins: 0
       },
       boosters: { hammer: 1, moves: 1, shuffle: 1, glove: 1, color: 1 },
       settings: { mute: false, music: true, fx: true },
@@ -1827,6 +1969,43 @@ window.MEI18N = {
     if (window.MESDK && window.MESDK.event) window.MESDK.event('coins_spend', { n: n });
     return true;
   }
+
+  /* ---------- rewarded ads: daily counters (ad-only monetization) ---------- */
+  function adRoll() {
+    if (!S.ads) S.ads = { day: '', used: {}, lastEpic: 0 };
+    if (!S.ads.used) S.ads.used = {};
+    var today = D.dayKey();
+    if (S.ads.day !== today) { S.ads.day = today; S.ads.used = {}; }
+    return S.ads;
+  }
+  function adLeft(id) {
+    var a = adRoll();
+    var lim = 0;
+    D.AD_OFFERS.forEach(function (o) { if (o.id === id) lim = o.perDay; });
+    if (id === 'doubleWin') lim = D.AD.doubleWinAd;
+    if (id === 'continue') lim = D.AD.continueAd;
+    if (!lim) return 0;
+    return Math.max(0, lim - (a.used[id] || 0));
+  }
+  function adUse(id) {
+    var a = adRoll();
+    a.used[id] = (a.used[id] || 0) + 1;
+    S.stats.adViews = (S.stats.adViews || 0) + 1;
+    save();
+    return a.used[id];
+  }
+  function adCanEpic() {
+    var a = adRoll();
+    if ((a.used.epic || 0) >= 1) return false;
+    return Date.now() - (a.lastEpic || 0) >= D.AD.epicChestHours * 3600000;
+  }
+  function adEpicStamp() { var a = adRoll(); a.lastEpic = Date.now(); save(); }
+  function adEpicWait() {
+    var a = adRoll();
+    var left = (a.lastEpic || 0) + D.AD.epicChestHours * 3600000 - Date.now();
+    return Math.max(0, Math.ceil(left / 60000));      /* minutes */
+  }
+  function adCoinsEarned(n) { S.stats.adCoins = (S.stats.adCoins || 0) + Math.max(0, n); }
 
   /* ---------- cars ---------- */
   function carStepCost(carIdx) {
@@ -1941,6 +2120,8 @@ window.MEI18N = {
     load: load, save: save, flush: flush, fresh: freshState,
     perk: perk, coinMult: coinMult, comboMult: comboMult,
     addCoins: addCoins, spend: spend,
+    adRoll: adRoll, adLeft: adLeft, adUse: adUse, adCanEpic: adCanEpic,
+    adEpicStamp: adEpicStamp, adEpicWait: adEpicWait, adCoinsEarned: adCoinsEarned,
     carStepCost: carStepCost, repairStep: repairStep, carDone: carDone,
     giveSouvenir: giveSouvenir, giveRelic: giveRelic,
     rollDaily: rollDaily, questProg: questProg, dailyChestReady: dailyChestReady, takeDailyChest: takeDailyChest,
@@ -3536,7 +3717,7 @@ window.MEI18N = {
     col.appendChild(row4);
     var row5 = el('div', 'row');
     row5.appendChild(UI.pill(ic('img/trophy_01.png') + T('trophy'), function () { SC.trophy(); UI.show('trophy'); }, 'ghost'));
-    row5.appendChild(UI.pill(ic('img/chest_open.png') + T('shop'), function () { SC.shop(); UI.show('shop'); }, 'ghost'));
+    row5.appendChild(UI.pill(ic('img/chest_open.png') + T('gifts'), function () { SC.shop(); UI.show('shop'); }, 'ghost'));
     col.appendChild(row5);
     s.appendChild(col);
     var bar = el('div', 'menu-bar glass');
@@ -3810,16 +3991,22 @@ window.MEI18N = {
     buy.appendChild(bImg);
     var mid2 = el('div', 'cc-mid');
     mid2.appendChild(el('div', 'car-name', T('chest')));
-    mid2.appendChild(el('div', 'dim', T('chestPrice') + ': ' + price));
+    mid2.appendChild(el('div', 'dim', T('chestPrice') + ': ' + price + (ME.adsOn() ? ' · ' + T('adFreeLeft') + ' ' + ST.adLeft('chest') : '')));
     mid2.appendChild(el('div', 'dim drops', '◆ ' + T('chestDrops')));
     mid2.appendChild(el('div', 'dim odds', T('chestOddsN')));
     buy.appendChild(mid2);
     var btns2 = el('div', 'cc-btn');
     btns2.appendChild(UI.pill(T('buy'), function () { openChestFlow('c', price); }));
-    if (window.MESDK.supports('rewarded')) {
+    var adChestLeft = ST.adLeft('chest');
+    if (ME.adsOn() && adChestLeft > 0) {
       btns2.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + T('open'), function () {
-        ME.rewarded(function (ok) { if (ok) openChestFlow('c', 0); });
-      }, 'ghost'));
+        ME.rewarded(function (ok) {
+          if (!ok) return;
+          ST.adUse('chest');
+          window.MESDK.event('ad_reward', { where: 'free_chest' });
+          openChestFlow('c', 0);
+        });
+      }, 'ghost ad-btn'));
     }
     buy.appendChild(btns2);
     list.appendChild(buy);
@@ -3835,6 +4022,19 @@ window.MEI18N = {
     epic.appendChild(mid3);
     var btns3 = el('div', 'cc-btn');
     btns3.appendChild(UI.pill(T('expedition'), function () { SC.exp(); UI.show('exp'); }, 'ghost'));
+    if (ME.adsOn()) {
+      var epicReady = ST.adLeft('epic') > 0 && ST.adCanEpic();
+      var waitM = ST.adEpicWait();
+      btns3.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + (epicReady ? T('open') : T('adEpicWait') + ' ' + (waitM >= 60 ? Math.ceil(waitM / 60) + ' ' + T('hours') : waitM + ' ' + T('min'))), function () {
+        if (!epicReady) return;
+        ME.rewarded(function (ok) {
+          if (!ok) return;
+          ST.adUse('epic'); ST.adEpicStamp();
+          window.MESDK.event('ad_reward', { where: 'epic_chest' });
+          openChestAnim(function () { chestReward('e'); SC.chests(); });
+        });
+      }, epicReady ? 'ad-btn' : 'disabled'));
+    }
     epic.appendChild(btns3);
     list.appendChild(epic);
     s.appendChild(list);
@@ -3850,6 +4050,10 @@ window.MEI18N = {
     ST.addCoins(bonus);
     rws.push({ img: 'img/ui_coin.png', label: '+' + bonus, rar: 'c' });
     UI.chestOpenAnim(rws, function () { SC.chests(); });
+  }
+  /* chest ceremony without rewards (used where the reward pops separately) */
+  function openChestAnim(cb) {
+    UI.chestOpenAnim([], function () { cb && cb(); });
   }
   function chestReward(minRar, silent) {
     var roll = Math.random();
@@ -3918,8 +4122,11 @@ window.MEI18N = {
     langRow.appendChild(el('div', 'q-label', T('language')));
     langRow.appendChild(UI.pill('RU / EN', function () { ME.setLang(ME.L === 'ru' ? 'en' : 'ru'); SC.settings(); }));
     wrap.appendChild(langRow);
-    if (!window.MESDK.supports('rewarded')) {
-      wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">Ads: n/a (fallback mode)</div>'));
+    if (ME.adsOn()) {
+      var adTxt = (ME.L === 'ru' ? 'Монетизация: только реклама. Доната нет — всё добывается просмотром видео.' : 'Monetization: ads only. No in-app purchases.');
+      if (!ME.realAds()) adTxt += (ME.L === 'ru' ? ' Вне VK реклама показывается заглушкой.' : ' Outside VK a placeholder ad is shown.');
+      wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + adTxt + '</div>'));
+      wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + (ME.L === 'ru' ? 'Просмотрено рекламы: ' : 'Ads watched: ') + (ST.S.stats.adViews || 0) + ' · ' + (ME.L === 'ru' ? 'получено монет: ' : 'coins earned: ') + (ST.S.stats.adCoins || 0) + '</div>'));
     }
     wrap.appendChild(UI.pill(T('reset'), function () {
       UI.confirm(T('reset_q'), function () { ST.reset(); location.reload(); }, 'YES');
@@ -3973,49 +4180,101 @@ window.MEI18N = {
     return 7 - day;
   }
 
-  /* ================= SHOP (VK votes) ================= */
-  var SHOP = [
-    { id: 'me_starter', votes: 10, grant: function () { ST.addCoins(500, true); ST.S.boosters.hammer += 2; ST.S.boosters.shuffle += 1; return [{ img: 'img/ui_coin.png', label: '+500', rar: 'c' }, { img: 'img/ic_hammer.png', label: '×2', rar: 'r' }, { img: 'img/ic_shuffle.png', label: '×1', rar: 'r' }]; } },
-    { id: 'me_coins_300', votes: 5, grant: function () { ST.addCoins(300, true); return [{ img: 'img/ui_coin.png', label: '+300', rar: 'c' }]; } },
-    { id: 'me_coins_1000', votes: 12, grant: function () { ST.addCoins(1000, true); return [{ img: 'img/ui_coin.png', label: '+1000', rar: 'r' }]; } },
-    { id: 'me_mega', votes: 30, grant: function () { ST.addCoins(3000, true); var g = ST.giveSouvenir('e', null); var rw = [{ img: 'img/ui_coin.png', label: '+3000', rar: 'l' }]; if (g && g.id != null) rw.push({ img: 'img/' + D.souvFile(D.SOUV[g.id]), label: T('souvNames')[g.id], rar: 'e' }); return rw; } }
-  ];
+  /* ============ GIFT CENTER — ad-only monetization (no votes, no IAP) ============ */
+  var BOOST_NAME = { hammer: 'boost_hammer', moves: 'boost_moves', shuffle: 'boost_shuffle', glove: 'boost_glove', color: 'boost_color' };
+  var BOOST_IMG = { hammer: 'img/ic_hammer.png', moves: 'img/ic_moves.png', shuffle: 'img/ic_shuffle.png', glove: 'img/ic_glove.png', color: 'img/ic_color.png' };
+  function adOfferLabel(o) {
+    if (o.souv || o.chest) return T('adDescs')[o.id] || T('chest');   /* chest offers: describe the drop */
+    var bits = [];
+    if (o.coins) bits.push('+' + o.coins + ' ' + T('coins'));
+    if (o.boost) bits.push(T(BOOST_NAME[o.boost.k]) + ' ×' + o.boost.n);
+    if (o.souv) bits.push(T('epic_chest'));
+    if (o.chest) bits.push(T('chest'));
+    return bits.join(' + ');
+  }
+  function adGrant(o) {
+    var rws = [];
+    if (o.coins) { ST.addCoins(o.coins, true); ST.adCoinsEarned(o.coins); rws.push({ img: 'img/ui_coin.png', label: '+' + o.coins, rar: 'c' }); }
+    if (o.boost) {
+      ST.S.boosters[o.boost.k] = (ST.S.boosters[o.boost.k] || 0) + o.boost.n;
+      rws.push({ img: BOOST_IMG[o.boost.k], label: T(BOOST_NAME[o.boost.k]) + ' ×' + o.boost.n, rar: 'r' });
+    }
+    if (o.souv) {
+      var g = ST.giveSouvenir(o.souv, null);
+      if (g && g.id != null) rws.push({ img: 'img/' + D.souvFile(D.SOUV[g.id]), label: T('souvNames')[g.id], rar: g.rar });
+      if (g && g.dup) rws.push({ img: 'img/ui_coin.png', label: '+' + g.coins, rar: 'c' });
+      if (g && g.regionDone) rws.push({ img: 'img/ui_coin.png', label: T('region_done') + ' +' + D.ECO.regionDone, rar: 'l' });
+    }
+    if (o.chest) {
+      var gc = chestReward(o.chest, true);
+      if (gc && gc.id != null) rws.push({ img: 'img/' + D.souvFile(D.SOUV[gc.id]), label: T('souvNames')[gc.id], rar: gc.rar });
+      if (gc && gc.dup) rws.push({ img: 'img/ui_coin.png', label: '+' + gc.coins, rar: 'c' });
+      if (gc && gc.regionDone) rws.push({ img: 'img/ui_coin.png', label: T('region_done') + ' +' + D.ECO.regionDone, rar: 'l' });
+      var bonus = Math.round(40 + Math.random() * 60);
+      ST.addCoins(bonus, true); ST.adCoinsEarned(bonus);
+      rws.push({ img: 'img/ui_coin.png', label: '+' + bonus, rar: 'c' });
+    }
+    ST.save(true);
+    ST.checkAch().forEach(function (a) { UI.toast(T('achievement') + ' ' + T('achNames')[a - 1], 'img/ui_star.png'); });
+    return rws;
+  }
+  /* one ad row: icon · name · reward · "left today" · AD button */
+  function adRow(key, img, name, desc, left, extraCls, onWatch) {
+    var row = el('div', 'glass chest-row' + (extraCls ? ' ' + extraCls : ''));
+    var im = el('img', 'chest-img'); im.src = img;
+    row.appendChild(im);
+    var mid = el('div', 'cc-mid');
+    mid.appendChild(el('div', 'car-name', name));
+    mid.appendChild(el('div', 'dim', desc));
+    mid.appendChild(el('div', 'dim ad-left-line', left >= 0
+      ? (left > 0 ? T('adLeftToday') + ': ' + left : T('adDoneToday'))
+      : ''));
+    row.appendChild(mid);
+    var btns = el('div', 'cc-btn');
+    var b = UI.pill('<span class="ad-tag">AD</span> ' + T('adWatch'), function () {
+      b.disabled = true;
+      ME.rewarded(function (ok) {
+        if (!ok) { b.disabled = false; return; }
+        ST.adUse(key);
+        window.MESDK.event('ad_reward', { where: key });
+        UI.chestOpenAnim(onWatch(), function () { SC.shop(); });
+      });
+    }, left > 0 ? 'ad-btn' : 'disabled');
+    if (left <= 0) b.disabled = true;
+    btns.appendChild(b);
+    row.appendChild(btns);
+    return row;
+  }
   SC.shop = function () {
     var s = $('scr-shop');
     if (!s) { s = el('div', 'screen'); s.id = 'scr-shop'; $('app').appendChild(s); }
     s.innerHTML = '';
     UI.setBg(5);
+    ST.rollDaily();
     var head = el('div', 'glass head');
-    head.innerHTML = '<div class="h-title">' + T('shop') + '</div><div class="h-coins"><img src="img/ui_coin.png" class="bar-ic">' + UI.coinLabel() + '</div>';
+    head.innerHTML = '<div class="h-title">' + T('gifts') + '</div><div class="h-coins"><img src="img/ui_coin.png" class="bar-ic">' + UI.coinLabel() + '</div>';
     head.appendChild(UI.backBtn(function () { SC.menu(); UI.show('menu'); }));
     s.appendChild(head);
     var list = el('div', 'chest-list');
-    SHOP.forEach(function (it) {
-      var row = el('div', 'glass chest-row');
-      var im = el('img', 'chest-img'); im.src = 'img/chest_closed.png';
-      row.appendChild(im);
-      var mid = el('div', 'cc-mid');
-      mid.appendChild(el('div', 'car-name', T('shopNames')[SHOP.indexOf(it)]));
-      mid.appendChild(el('div', 'dim', T('shopDescs')[SHOP.indexOf(it)]));
-      row.appendChild(mid);
-      var btns = el('div', 'cc-btn');
-      btns.appendChild(UI.pill(it.votes + ' ★', function () {
-        if (!window.VKSDK || !window.VKSDK.inVK()) { UI.info(T('shop'), '<div class="center">' + T('vkOnly') + '</div>'); return; }
-        window.VKSDK.purchase(it.id, function (ok) {
-          if (!ok) { console.warn('[ME] purchase failed', it.id); UI.toast(ME.txt('payFail')); return; }
-          window.MESDK.event('purchase', { item: it.id, votes: it.votes });
-          var rws = it.grant();
-          ST.save(true);
-          UI.chestOpenAnim(rws, function () { SC.shop(); });
-        });
-      }));
-      row.appendChild(btns);
-      list.appendChild(row);
+    D.AD_OFFERS.forEach(function (o) {
+      var left = ST.adLeft(o.id);
+      if (o.id === 'epic') {
+        var wait = ST.adEpicWait();
+        var ready = left > 0 && ST.adCanEpic();
+        list.appendChild(adRow(o.id, o.img, T('adNames').epic, ready ? adOfferLabel(o) : T('adEpicWait') + ': ' + (wait >= 60 ? Math.ceil(wait / 60) + ' ' + T('hours') : wait + ' ' + T('min')), ready ? 1 : -1, ready ? 'epic' : '', function () {
+          ST.adEpicStamp();
+          return adGrant(o);
+        }));
+        return;
+      }
+      list.appendChild(adRow(o.id, o.img, T('adNames')[o.id], adOfferLabel(o), left, o.id === 'big' ? 'epic' : '', function () { return adGrant(o); }));
     });
     s.appendChild(list);
-    s.appendChild(el('div', 'exp-hint', T('shopNote')));
+    var foot = el('div', 'gift-foot');
+    foot.appendChild(el('div', 'exp-hint', T('adNote')));
+    foot.appendChild(el('div', 'exp-hint', T('adCap').replace('{n}', D.AD.dailyCapCoins)));
+    s.appendChild(foot);
   };
-
   /* ================= TROPHY TRAIN ================= */
   SC.trophy = function () {
     var s = $('scr-trophy');
@@ -4093,7 +4352,9 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.16-a',
+    build: '2026.10.17-a',
+    /* 'ads' = ad-only monetization (no votes / no IAP). 'iap' keeps the old vote shop. */
+    monetization: 'ads',
     L: 'en',
     txt: function (k) {
       var d = window.MEI18N[ME.L] || window.MEI18N.en;
@@ -4106,18 +4367,71 @@ window.MEI18N = {
     },
     audio: window.MEaudio,
     ui: UI,
+    /* ---------- rewarded ads: the only monetization ---------- */
+    adsOn: function () { return ME.monetization === 'ads'; },
+    /* is there a real ad source (VK native reward / GamePush rewarded video)? */
+    realAds: function () {
+      if (window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK()) return true;
+      return !!(window.MESDK && window.MESDK.supports && window.MESDK.supports('rewarded'));
+    },
+    /* show an ad, then cb(true). Outside VK / without an ad SDK a short
+       placeholder plays so the economy stays playable (and testable). */
     rewarded: function (cb) {
+      var busy = false;
+      function once(ok) { if (busy) return; busy = true; cb && cb(!!ok); }
       if (window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK()) {
         window.VKSDK.rewarded(function (ok) {
-          if (!ok) { UI.toast(ME.txt('adClosed')); cb && cb(false); return; }
-          cb && cb(true);
+          if (!ok) { UI.toast(ME.txt('adClosed')); once(false); return; }
+          once(true);
         });
         return;
       }
-      window.MESDK.rewarded(function (real) {
-        if (!real) UI.toast(ME.txt('adFallback'));
-        cb && cb(true, !real);
-      }, function () { UI.toast(ME.txt('adFallback')); cb && cb(true, true); });
+      if (window.MESDK && window.MESDK.supports && window.MESDK.supports('rewarded')) {
+        window.MESDK.rewarded(function (real) { once(true); }, function () { once(false); });
+        return;
+      }
+      ME.fakeAd(function () { once(true); }, function () { once(false); });
+    },
+    /* placeholder "ad" for standalone builds (GitHub Pages, testing) */
+    fakeAd: function (onDone, onSkip) {
+      var sec = 5, closed = false;
+      var veil = el('div', 'ad-veil');
+      (document.body || $('app')).appendChild(veil);
+      var p = UI.popup(function (box, pp) {
+        box.className += ' fake-ad-pop';
+        box.appendChild(el('div', 'p-title', '<span class="ad-tag">AD</span> ' + ME.txt('adFake')));
+        var stage = el('div', 'fake-ad');
+        stage.innerHTML = '<div class="fa-bars"><i></i><i></i><i></i></div>' +
+          '<div class="fa-count">' + sec + '</div>' +
+          '<div class="fa-note">' + ME.txt('adFakeNote') + '</div>';
+        box.appendChild(stage);
+        var row = el('div', 'row');
+        var cnt = stage.querySelector('.fa-count');
+        var skipBtn = UI.pill(ME.txt('adSkip'), function () {
+          closed = true; clearInterval(iv); veil.remove(); pp.close();
+          UI.toast(ME.txt('adClosed')); onSkip && onSkip();
+        }, 'ghost');
+        row.appendChild(skipBtn);
+        var getBtn = UI.pill(ME.txt('adGet'), function () {
+          closed = true; clearInterval(iv); veil.remove(); pp.close(); onDone && onDone();
+        });
+        getBtn.disabled = true;
+        row.appendChild(getBtn);
+        box.appendChild(row);
+        var iv = setInterval(function () {
+          sec--;
+          if (cnt) cnt.textContent = Math.max(0, sec);
+          if (sec <= 0) {
+            clearInterval(iv);
+            getBtn.disabled = false;
+            getBtn.innerHTML = '\u25B6 ' + ME.txt('adGet');
+            if (cnt) cnt.textContent = '\u2713';
+            ME.audio.sfx.tap();
+          }
+        }, 1000);
+      });
+      /* safety: never lock the player in */
+      setTimeout(function () { if (!closed) { closed = true; try { veil.remove(); p.close(); } catch (e) {} onDone && onDone(); } }, 20000);
     },
     openMap: function () { window.MEScreens.map(); UI.show('map'); },
     fxOn: function () { return !!(window.MEState && window.MEState.S.settings.fx); },
@@ -4703,9 +5017,18 @@ window.MEI18N = {
         if (souvMsg && souvMsg.id != null) box.appendChild(el('div', 'res-sub', ME.txt('new_souv') + ': ' + ME.txt('souvNames')[souvMsg.id]));
         if (souvMsg && souvMsg.dup) box.appendChild(el('div', 'res-sub', ME.txt('duplicate') + ' +' + souvMsg.coins));
         var row = el('div', 'row');
-        if (window.MESDK.supports('rewarded') || (window.VKSDK && window.VKSDK.inVK())) row.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + ME.txt('double_coins'), function () {
+        var dblLeft = ST.adLeft('doubleWin');
+        if (ME.adsOn() && dblLeft > 0) row.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + ME.txt('double_coins') + ' <span class="ad-left">· ' + dblLeft + '</span>', function () {
           row.children[0].disabled = true;
-          ME.rewarded(function (ok) { if (!ok) { row.children[0].disabled = false; return; } ST.addCoins(coins); ME.audio.sfx.coin(); var cn2 = box.querySelector('.res-coins .cn'); if (cn2) cn2.textContent = '+' + (coins * 2); });
+          ME.rewarded(function (ok) {
+            if (!ok) { row.children[0].disabled = false; return; }
+            ST.adUse('doubleWin');
+            ST.addCoins(coins); ST.adCoinsEarned(coins);
+            ME.audio.sfx.coin();
+            var cn2 = box.querySelector('.res-coins .cn'); if (cn2) cn2.textContent = '+' + (coins * 2);
+            row.children[0].innerHTML = ME.txt('done');
+            window.MESDK.event('ad_reward', { where: 'double_win', coins: coins });
+          });
         }, 'ghost')); else row.appendChild(el('span'));
         if (G.hardcore) {
           row.appendChild(UI.pill(ME.txt('next'), function () { p.close(); G.run++; ME.startLevel(Math.min(240, 100 + G.run * 4), { hardcore: true, run: G.run }); }));
@@ -4724,11 +5047,26 @@ window.MEI18N = {
         var row2 = el('div', 'row');
         var canFree = ST.perk('freeContinue') && ST.S.daily.freeContinue !== D.dayKey();
         var contCost = Math.round(D.ECO.continueCost * (ST.perk('medic') ? 0.5 : 1));
-        row2.appendChild(UI.pill(ME.txt('continue_q').split(' ')[0] + ' · ' + contCost, function () {
-          if (canFree) { ST.S.daily.freeContinue = D.dayKey(); continueRun(p); }
-          else if (ST.spend(contCost)) continueRun(p);
-          else ME.rewarded(function (ok) { if (ok) continueRun(p); });
-        }));
+        var adContLeft = ST.adLeft('continue');
+        if (canFree) {
+          row2.appendChild(UI.pill(ME.txt('free') + ' · +5', function () {
+            ST.S.daily.freeContinue = D.dayKey(); continueRun(p);
+          }));
+        } else if (ME.adsOn() && adContLeft > 0) {
+          row2.appendChild(UI.pill('<span class=ad-tag>AD</span> ' + ME.txt('continue_ad'), function () {
+            ME.rewarded(function (ok) {
+              if (!ok) return;
+              ST.adUse('continue');
+              window.MESDK.event('ad_reward', { where: 'continue' });
+              continueRun(p);
+            });
+          }));
+        } else {
+          row2.appendChild(UI.pill(ME.txt('continue_q').split(' ')[0] + ' · ' + contCost, function () {
+            if (ST.spend(contCost)) continueRun(p);
+            else UI.toast('× ' + ME.txt('coins'));
+          }));
+        }
         row2.appendChild(UI.pill(ME.txt('retry'), function () { p.close(); ME.startLevel(G.lvl, { hardcore: G.hardcore, run: G.run }); }));
         row2.appendChild(UI.pill(ME.txt('menu'), function () { p.close(); exitToMenu(); }));
         box.appendChild(row2);
