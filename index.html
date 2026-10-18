@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.17-a">
+<meta name="build" content="2026.10.18-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -67,6 +67,7 @@ html, body {
 .pill.ghost { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.55); text-shadow: none; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
 .pill.big { font-size: 22px; padding: 17px 30px; }
 .pill.small { padding: 8px 12px; font-size: 14px; }
+.pill.wrap2 { white-space: normal; line-height: 1.12; overflow-wrap: break-word; }
 .pill.disabled, .pill:disabled { filter: grayscale(.8) brightness(.7); pointer-events: none; }
 .pill.danger { background: linear-gradient(#e86a5a, #c8452c); box-shadow: 0 4px 0 #7a2a18; }
 .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
@@ -175,6 +176,32 @@ html, body {
 .reg-bonus { padding: 8px 12px; font-size: 12px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .reg-chip { width: 22px; height: 22px; border-radius: 8px; background: #6a6f76; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; }
 .reg-chip.ok { background: linear-gradient(#ffd97a, #e8952a); color: #5a3a10; }
+
+/* ---------- souvenir wagons (album) ---------- */
+.sv-fillwrap { display: flex; align-items: center; gap: 8px; margin: 0 2px 6px; flex: 0 0 auto; }
+.sv-fill { flex: 1; height: 10px; border-radius: 999px; background: rgba(10,14,36,.6); border: 1px solid rgba(255,255,255,.28); overflow: hidden; }
+.sv-fill i { display: block; height: 100%; background: linear-gradient(90deg, #ffd97a, #e8952a); border-radius: 999px; transition: width .5s cubic-bezier(.2,1.4,.4,1); }
+.sv-fill-t { font-size: 11px; font-weight: 900; color: #ffe9a8; text-shadow: 0 1px 0 rgba(0,0,0,.5); white-space: nowrap; }
+.sv-wrap { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
+.sv-loco { width: 170px; align-self: center; filter: drop-shadow(0 8px 10px rgba(0,0,0,.4)); }
+.sv-car { position: relative; padding: 50px 6px 8px; flex: 0 0 auto; }
+.sv-car-img { position: absolute; left: 50%; top: 0; transform: translateX(-50%); width: min(94vw, 360px); opacity: .95; filter: drop-shadow(0 6px 8px rgba(0,0,0,.35)); pointer-events: none; }
+.sv-inner { position: relative; width: min(56vw, 214px); margin: 0 auto; }
+.sv-cat { text-align: center; font-weight: 900; color: #ffe9a8; text-shadow: 0 2px 0 rgba(0,0,0,.55); font-size: 12px; margin-bottom: 5px; display: flex; gap: 6px; align-items: center; justify-content: center; }
+.sv-cat-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.sv-cnt { font-size: 11px; color: #cfe0ff; font-weight: 800; background: rgba(10,14,36,.6); border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.sv-cnt.full { color: #5a3a10; background: linear-gradient(#ffd97a, #e8952a); border-color: #ffe9a8; }
+.sv-slots { display: grid; gap: 6px; }
+.sv-slots.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sv-slots.c8 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sv-slot { aspect-ratio: 1; border-radius: 12px; border: 2px solid rgba(255,255,255,.28); background: rgba(12,16,40,.5); display: flex; align-items: center; justify-content: center; cursor: pointer; min-width: 0; padding: 0; }
+.sv-slot img { width: 82%; height: 82%; filter: brightness(.22) grayscale(.7); }
+.sv-slot.got { border-color: #e8b42a; background: rgba(232,180,42,.16); box-shadow: 0 0 10px rgba(232,180,42,.4); }
+.sv-slot.got img { filter: none; }
+.sv-slot.got.r-r { border-color: #4aa8e8; background: rgba(74,168,232,.14); box-shadow: 0 0 10px rgba(74,168,232,.45); }
+.sv-slot.got.r-e { border-color: #a85ae8; background: rgba(168,90,232,.14); box-shadow: 0 0 12px rgba(168,90,232,.5); }
+.sv-slot.got.r-l { border-color: #ffd97a; background: rgba(232,180,42,.22); box-shadow: 0 0 14px rgba(232,180,42,.7); }
+.sv-lock-note { font-size: 12px; margin-top: 6px; }
 
 /* ---------- pax ---------- */
 .pax-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-bottom: 12px; }
@@ -1091,7 +1118,7 @@ window.ME_ASSETS = null;
 window.MEI18N = {
   ru: {
     title: 'Магический Экспресс', subtitle: 'Большое Путешествие',
-    play: 'ИГРАТЬ', train: 'Поезд', album: 'Альбом', pax: 'Пассажиры', chests: 'Сундуки',
+    play: 'ИГРАТЬ', train: 'Поезд', album: 'Альбом сувениров', pax: 'Пассажиры', chests: 'Сундуки',
     quests: 'Квесты', settings: 'Настройки', expedition: 'Экспедиция', hardcore: 'Режим Проводника',
     map: 'МАРШРУТ ЭКСПРЕССА', moves: 'ХОДЫ', goals: 'ЦЕЛИ', coins: 'МОНЕТЫ', level: 'УРОВЕНЬ',
     whistle: 'ГУДОК', boss: 'БОСС', station: 'СТАНЦИЯ!', region: 'РЕГИОН',
@@ -1113,6 +1140,8 @@ window.MEI18N = {
     orderHelp: 'Пассажир просит собрать за уровень несколько фигур нужного типа — они показаны на плашке сверху рядом с его портретом. Выполните заказ — получите +15 монет (с Панорамным вагоном ×2). Заказ не мешает основной цели уровня и появляется начиная с 6-го уровня.', carFixedBanner: 'ВАГОН ПОЧИНЕН!',
     achievement: 'Достижение!', new_souv: 'Новый сувенир!', duplicate: 'Дубликат',
     region_done: 'Регион собран!', bonus: 'бонус',
+    wagonFill: 'Вагон заполнен', svCarSpecial: 'Эпики и легенды', svCarRelic: 'Реликвии боссов',
+    souvLocked: 'Ещё не найден — ищи в сундуках, Экспедиции и у боссов регионов',
     hc_desc: 'Бесконечный забег: без бустеров, одна попытка. Рекорд попадает в лидерборд.',
     hc_start: 'НАЧАТЬ ЗАБЕГ', hc_over: 'ЗАБЕГ ОКОНЧЕН', hc_best: 'Рекорд', hc_score: 'Очки',
     leader: 'Лидерборд', you: 'Вы',
@@ -1233,7 +1262,7 @@ window.MEI18N = {
   },
   en: {
     title: 'Magic Express', subtitle: 'Grand Journey',
-    play: 'PLAY', train: 'Train', album: 'Album', pax: 'Passengers', chests: 'Chests',
+    play: 'PLAY', train: 'Train', album: 'Souvenir Album', pax: 'Passengers', chests: 'Chests',
     quests: 'Quests', settings: 'Settings', expedition: 'Expedition', hardcore: 'Conductor Mode',
     map: 'EXPRESS ROUTE', moves: 'MOVES', goals: 'GOALS', coins: 'COINS', level: 'LEVEL',
     whistle: 'WHISTLE', boss: 'BOSS', station: 'STATION!', region: 'REGION',
@@ -1255,6 +1284,8 @@ window.MEI18N = {
     orderHelp: 'A passenger asks you to collect several pieces of one type during the level — see the tag with their portrait at the top. Complete it to earn +15 coins (×2 with the Panorama car). The order never blocks the main level goal and appears from level 6 onward.', carFixedBanner: 'CAR RESTORED!',
     achievement: 'Achievement!', new_souv: 'New souvenir!', duplicate: 'Duplicate',
     region_done: 'Region complete!', bonus: 'bonus',
+    wagonFill: 'Wagon filled', svCarSpecial: 'Epics & legends', svCarRelic: 'Boss relics',
+    souvLocked: 'Not found yet — look in chests, the Expedition and region bosses',
     hc_desc: 'Endless run: no boosters, one attempt. Score goes to the leaderboard.',
     hc_start: 'START RUN', hc_over: 'RUN OVER', hc_best: 'Best', hc_score: 'Score',
     leader: 'Leaderboard', you: 'You',
@@ -3701,7 +3732,7 @@ window.MEI18N = {
     col.appendChild(UI.pill('▶ ' + T('play'), function () { ME.openMap(); }, 'big'));
     var row1 = el('div', 'row');
     row1.appendChild(UI.pill(ic('img/train_car_01_fixed.png') + T('train'), function () { SC.train(); UI.show('train'); }));
-    row1.appendChild(UI.pill(ic('img/souv_c_08.png') + T('album'), function () { SC.album(); UI.show('album'); }));
+    row1.appendChild(UI.pill(ic('img/souv_c_08.png') + T('album'), function () { SC.album(); UI.show('album'); }, 'wrap2'));
     col.appendChild(row1);
     var row2 = el('div', 'row');
     row2.appendChild(UI.pill(ic('img/passenger_01.png') + T('pax'), function () { SC.pax(); UI.show('pax'); }));
@@ -3717,7 +3748,7 @@ window.MEI18N = {
     col.appendChild(row4);
     var row5 = el('div', 'row');
     row5.appendChild(UI.pill(ic('img/trophy_01.png') + T('trophy'), function () { SC.trophy(); UI.show('trophy'); }, 'ghost'));
-    row5.appendChild(UI.pill(ic('img/chest_open.png') + T('gifts'), function () { SC.shop(); UI.show('shop'); }, 'ghost'));
+    row5.appendChild(UI.pill(ic('img/chest_open.png') + T('shop'), function () { SC.shop(); UI.show('shop'); }, 'ghost'));
     col.appendChild(row5);
     s.appendChild(col);
     var bar = el('div', 'menu-bar glass');
@@ -3867,13 +3898,15 @@ window.MEI18N = {
     UI.dialog(ci % 20, lines);
   }
 
-  /* ================= ALBUM ================= */
+  /* ================= ALBUM (souvenir wagons) ================= */
   SC.album = function () {
     var s = $('scr-album'); s.innerHTML = '';
     UI.setBg(5);
+    var ownedN = Object.keys(ST.S.souv).length;
+    var pct = Math.round(100 * ownedN / D.SOUV.length);
     var head = el('div', 'glass head');
-    head.innerHTML = '<div class="h-title">' + T('album_title') + '</div><div class="h-coins">' + Object.keys(ST.S.souv).length + '/' + D.SOUV.length + ' · +' + (Object.keys(ST.S.souv).length * 2) + '% ' + T('coins') + '</div>';
-    head.title = ME.plural(Object.keys(ST.S.souv).length, ME.L === 'ru' ? ['сувенир', 'сувенира', 'сувениров'] : ['souvenir', 'souvenirs', 'souvenirs']);
+    head.innerHTML = '<div class="h-title">' + T('album_title') + '</div><div class="h-coins">' + ownedN + '/' + D.SOUV.length + ' · +' + (ownedN * 2) + '% ' + T('coins') + '</div>';
+    head.title = ME.plural(ownedN, ME.L === 'ru' ? ['сувенир', 'сувенира', 'сувениров'] : ['souvenir', 'souvenirs', 'souvenirs']);
     head.appendChild(UI.backBtn(function () { SC.menu(); UI.show('menu'); }));
     s.appendChild(head);
     var tabs = el('div', 'alb-tabs');
@@ -3885,31 +3918,72 @@ window.MEI18N = {
         tabs.appendChild(UI.pill(rg + (doneR ? '★' : ''), function () { SC._albTab = rg; SC.album(); }, curTab === rg ? '' : 'ghost small'));
       })(rg);
     }
+    (function () {
+      var doneSpec = D.SOUV.filter(function (x) { return !x.reg; }).every(function (x) { return ST.S.souv[x.id]; });
+      tabs.appendChild(UI.pill((ME.L === 'ru' ? 'Особые' : 'Special') + (doneSpec ? '★' : ''), function () { SC._albTab = 9; SC.album(); }, curTab === 9 ? '' : 'ghost small'));
+    })();
     s.appendChild(tabs);
-    if (curTab && !ST.S.regCeleb[curTab] && D.SOUV.filter(function (x) { return x.reg === curTab; }).every(function (x) { return ST.S.souv[x.id]; })) {
+    if (curTab >= 1 && curTab <= 8 && !ST.S.regCeleb[curTab] && D.SOUV.filter(function (x) { return x.reg === curTab; }).every(function (x) { return ST.S.souv[x.id]; })) {
       ST.S.regCeleb[curTab] = 1; ST.save();
       setTimeout(function () { UI.banner(T('region_done'), T('regions')[curTab - 1], '#8aff8a'); ME.audio.sfx.win(); }, 250);
     }
-    var grid = el('div', 'souv-grid');
-    D.SOUV.forEach(function (sv) {
-      if (curTab && sv.reg !== curTab) return;
+    /* how full is the wagon? */
+    var fw = el('div', 'sv-fillwrap');
+    fw.innerHTML = '<div class="sv-fill"><i style="width:' + pct + '%"></i></div><div class="sv-fill-t">' + T('wagonFill') + ': ' + pct + '%</div>';
+    s.appendChild(fw);
+    /* ---- the souvenir train ---- */
+    function slotFor(sv) {
       var owned = !!ST.S.souv[sv.id];
-      var cellEl = el('div', 'souv-cell glass' + (owned ? ' owned r-' + sv.rar : ''));
-      var im = el('img'); im.src = 'img/' + D.souvFile(sv);
-      if (!owned) im.style.filter = 'brightness(0.25)';
-      cellEl.appendChild(im);
-      cellEl.onclick = function () {
-        UI.info(T('souvNames')[sv.id],
-          '<div class="center">' + T('rar')[{ c: 0, r: 1, e: 2, l: 3 }[sv.rar]] + (sv.reg ? ' · ' + T('regions')[sv.reg - 1] : '') + '</div>' +
-          (owned ? '' : '<div class="dim center">??? </div>'));
+      var b = el('button', 'sv-slot' + (owned ? ' got r-' + sv.rar : ''));
+      var im = el('img'); im.src = 'img/' + D.souvFile(sv); im.alt = '';
+      b.appendChild(im);
+      b.onclick = function () {
+        var sub = '<div class="center">' + T('rar')[{ c: 0, r: 1, e: 2, l: 3 }[sv.rar]] +
+          (sv.reg ? ' · ' + T('regions')[sv.reg - 1] : (sv.relic ? ' · ' + T('bosses')[sv.relic - 1] : '')) + '</div>';
+        UI.info(owned ? T('souvNames')[sv.id] : '???',
+          sub + (owned ? '' : '<div class="dim center sv-lock-note">' + T('souvLocked') + '</div>'));
       };
-      grid.appendChild(cellEl);
-    });
-    s.appendChild(grid);
+      return b;
+    }
+    function buildCar(label, items, cols, carImg) {
+      var gotN = items.filter(function (x) { return ST.S.souv[x.id]; }).length;
+      var car = el('div', 'sv-car');
+      var bg = el('img', 'sv-car-img'); bg.src = 'img/' + carImg; bg.alt = '';
+      car.appendChild(bg);
+      var inner = el('div', 'sv-inner');
+      var cat = el('div', 'sv-cat');
+      cat.innerHTML = '<span class="sv-cat-t">' + label + '</span><span class="sv-cnt' + (gotN === items.length && items.length ? ' full' : '') + '">' + gotN + '/' + items.length + '</span>';
+      inner.appendChild(cat);
+      var slots = el('div', 'sv-slots c' + cols);
+      items.forEach(function (sv) { slots.appendChild(slotFor(sv)); });
+      inner.appendChild(slots);
+      car.appendChild(inner);
+      return car;
+    }
+    var specItems = D.SOUV.filter(function (x) { return !x.reg && !x.relic; });
+    var relicItems = D.SOUV.filter(function (x) { return !!x.relic; });
+    function regItems(rg2) { return D.SOUV.filter(function (x) { return x.reg === rg2; }); }
+    function regCar(rg2) { return buildCar(T('regions')[rg2 - 1], regItems(rg2), 4, 'train_car_' + String(rg2 + 1).padStart(2, '0') + '_fixed.png'); }
+    function specCar() { return buildCar(T('svCarSpecial'), specItems, 8, 'train_car_11_fixed.png'); }
+    function relicCar() { return buildCar(T('svCarRelic'), relicItems, 8, 'train_car_12_fixed.png'); }
+    var wrap = el('div', 'sv-wrap');
+    if (curTab === 0) {
+      var loco = el('img', 'sv-loco'); loco.src = 'img/train_car_01_fixed.png'; loco.alt = '';
+      wrap.appendChild(loco);
+      for (var rg2 = 1; rg2 <= 8; rg2++) wrap.appendChild(regCar(rg2));
+      wrap.appendChild(specCar());
+      wrap.appendChild(relicCar());
+    } else if (curTab === 9) {
+      wrap.appendChild(specCar());
+      wrap.appendChild(relicCar());
+    } else {
+      wrap.appendChild(regCar(curTab));
+    }
+    s.appendChild(wrap);
     var regRow = el('div', 'reg-bonus glass');
     var txt = '';
     for (var reg = 1; reg <= 8; reg++) {
-      var all = D.SOUV.filter(function (x) { return x.reg === reg; }).every(function (x) { return ST.S.souv[x.id]; });
+      var all = regItems(reg).every(function (x) { return ST.S.souv[x.id]; });
       txt += '<span class="reg-chip' + (all ? ' ok' : '') + '">' + reg + '</span>';
     }
     regRow.innerHTML = txt + ' <span class="dim">' + (ME.L === 'ru' ? 'полный регион = рамка + 500 монет' : 'full region = frame + 500 coins') + '</span>';
@@ -4252,7 +4326,7 @@ window.MEI18N = {
     UI.setBg(5);
     ST.rollDaily();
     var head = el('div', 'glass head');
-    head.innerHTML = '<div class="h-title">' + T('gifts') + '</div><div class="h-coins"><img src="img/ui_coin.png" class="bar-ic">' + UI.coinLabel() + '</div>';
+    head.innerHTML = '<div class="h-title">' + T('shop') + '</div><div class="h-coins"><img src="img/ui_coin.png" class="bar-ic">' + UI.coinLabel() + '</div>';
     head.appendChild(UI.backBtn(function () { SC.menu(); UI.show('menu'); }));
     s.appendChild(head);
     var list = el('div', 'chest-list');
@@ -4352,7 +4426,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.17-a',
+    build: '2026.10.18-a',
     /* 'ads' = ad-only monetization (no votes / no IAP). 'iap' keeps the old vote shop. */
     monetization: 'ads',
     L: 'en',
