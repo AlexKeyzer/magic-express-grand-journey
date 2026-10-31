@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.18-a">
+<meta name="build" content="2026.10.30-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -593,7 +593,9 @@ html, body {
 @media (min-width: 700px) {
   #scr-game { max-width: 660px; margin: 0 auto; padding: 10px 16px; }
   #hud-top, #hud-bot { max-width: 660px; margin-left: auto; margin-right: auto; }
-  .hud-glass { padding: 6px 12px; gap: 8px; }
+  /* keep the right-padding reserve for the round pause button: without it the
+     padding shorthand lets the button cover the coin counter on wide (web) screens */
+  .hud-glass { padding: 6px 66px 6px 12px; gap: 8px; }
   #hud-bot { padding-top: 6px; }
 }
 @media (min-width: 700px) and (orientation: landscape) {
@@ -781,7 +783,7 @@ window.ME_ASSETS = null;
     vkBridge: null,
     _started: false, _bannerOn: false, _initAck: false,
     sessionStart: Date.now(), lastInter: 0,
-    onHide: null
+    onHide: null, onShow: null
   };
 
   function inIframe() { try { return window.top !== window.self; } catch (e) { return true; } }
@@ -811,6 +813,9 @@ window.ME_ASSETS = null;
       VK._initAck = true;
       return;
     }
+    /* incoming platform events (micro-bridge mode, no official bridge loaded) */
+    if (d.type === 'VKWebAppViewHide' && VK.onHide) VK.onHide();
+    if (d.type === 'VKWebAppViewRestore' && VK.onShow) VK.onShow();
     if (/VKWebApp/.test(d.type || '')) VK._initAck = true;
   });
   function microSend(method, params) {
@@ -871,7 +876,11 @@ window.ME_ASSETS = null;
         try {
           if (br.subscribe) br.subscribe(function (ev) {
             var t = ev && ev.detail && ev.detail.type;
+            /* minimize / restore (see VK guide "handle-minimize-and-restore-events"):
+               the client sends ViewHide when the game screen goes to background
+               and ViewRestore when the player returns. */
             if (t === 'VKWebAppViewHide' && VK.onHide) VK.onHide();
+            if (t === 'VKWebAppViewRestore' && VK.onShow) VK.onShow();
           });
         } catch (e) {}
         VK.signalReady();
@@ -951,11 +960,24 @@ window.ME_ASSETS = null;
     send('VKWebAppGetBalance').then(function (r) { cb && cb(r && r.balance != null ? +r.balance : null); }).catch(function () { cb && cb(null); });
   };
 
-  /* ---------- cloud storage ---------- */
+  /* ---------- cloud storage ----------
+     Official bridge names: VKWebAppStorageGet / VKWebAppStorageSet / VKWebAppStorageGetKeys.
+     Platform limits: key <= 32 chars, value <= 4096 chars — big saves are
+     therefore split into chunks by MEState (see state.js). */
   VK.storageGet = function (key, cb) {
     send('VKWebAppStorageGet', { keys: [key] })
       .then(function (r) { cb && cb(r && r.keys && r.keys.length ? r.keys[0].value : null); })
       .catch(function () { cb && cb(null); });
+  };
+  VK.storageGetMany = function (keys, cb) {
+    if (!keys || !keys.length) { cb && cb({}); return; }
+    send('VKWebAppStorageGet', { keys: keys })
+      .then(function (r) {
+        var map = {};
+        if (r && r.keys) r.keys.forEach(function (kv) { if (kv && kv.key != null) map[kv.key] = kv.value; });
+        cb && cb(map);
+      })
+      .catch(function () { cb && cb({}); });
   };
   VK.storageSet = function (key, value, cb) {
     send('VKWebAppStorageSet', { key: key, value: value }).then(function () { cb && cb(true); }).catch(function () { cb && cb(false); });
@@ -1019,13 +1041,14 @@ window.ME_ASSETS = null;
       l = (l || 'en').toLowerCase().slice(0, 2);
       return l === 'ru' ? 'ru' : (l === 'en' ? 'en' : 'en');
     },
-    /* ---- cloud save: ONE player field ---- */
+    /* ---- cloud save: ONE player field ----
+       Local + GamePush here; the VK cloud mirror (chunked, timestamped)
+       lives in MEState.cloudPush so big saves never hit the 4096-char value limit. */
     saveSet: function (obj) {
       var str = JSON.stringify(obj);
       if (SDK.has('player.set')) {
         try { GP.player.set('save', str); SDK.call('player.sync', []); return true; } catch (e) {}
       }
-      if (window.VKSDK) { window.VKSDK.storageSet('save', str); }
       try { localStorage.setItem('me_save', str); } catch (e) {}
       return false;
     },
@@ -1233,6 +1256,8 @@ window.MEI18N = {
     adWatch: 'Смотреть', adGet: 'Забрать награду', adSkip: 'Пропустить',
     adFake: 'Реклама', adFakeNote: 'Внутри VK здесь проигрывается настоящее видео с наградой',
     adNote: 'Доната нет: награды добываются просмотром короткой рекламы. Лимиты обновляются каждый день.',
+    syncNote: 'Прогресс хранится в вашем аккаунте VK и автоматически синхронизируется между устройствами (Android, iOS, веб).',
+    cloudLoaded: 'Прогресс загружен с другого устройства',
     adCap: 'Максимум за день: {n} монет + бустеры.',
     adEpicWait: 'До следующего', hours: 'ч', min: 'мин', adFreeLeft: 'бесплатно за рекламу:',
     continue_ad: 'Бесплатно +5',
@@ -1374,6 +1399,8 @@ window.MEI18N = {
     adWatch: 'Watch', adGet: 'Claim reward', adSkip: 'Skip',
     adFake: 'Ad', adFakeNote: 'Inside VK a real rewarded video plays here',
     adNote: 'No in-app purchases: every reward here is earned by watching a short ad. Limits reset daily.',
+    syncNote: 'Your progress is stored in your VK account and syncs automatically between devices (Android, iOS, web).',
+    cloudLoaded: 'Progress loaded from another device',
     adCap: 'Daily maximum: {n} coins and boosters from ads.',
     adEpicWait: 'Next one in', hours: 'h', min: 'min', adFreeLeft: 'free via ad:',
     continue_ad: 'Free +5',
@@ -1890,7 +1917,8 @@ window.MEI18N = {
       intensityT = setTimeout(function () { intensity = 0; }, ms || 2000);
     },
     suspend: function () { suspended = true; stopLoop(); if (ctx) { try { ctx.suspend(); } catch (e) {} } },
-    resume: function () { suspended = false; if (ctx) { try { ctx.resume(); } catch (e) {} } if (musicOn) startLoop(); }
+    resume: function () { suspended = false; if (ctx) { try { ctx.resume(); } catch (e) {} } if (musicOn) startLoop(); },
+    isSuspended: function () { return suspended; }
   };
 })();
 
@@ -1951,7 +1979,98 @@ window.MEI18N = {
     saveTimer = null;
     if (!dirty) return;
     dirty = false;
+    S.ts = Date.now();                 /* stamp every save: cloud merge is last-write-wins */
     window.MESDK.saveSet(S);
+    cloudPush(false);                  /* debounced mirror to VK cloud (cross-device sync) */
+  }
+
+  /* ---------- cross-platform cloud save (VK storage, moderation rule 2.3.8) ----------
+     Layout: meta key 'mex_m' = "<ts>:<chunks>", chunk keys 'mex_c0..N' (<=3500 chars
+     each — platform value limit is 4096), plus a legacy single 'save' key mirror so
+     older builds still see the progress. Merge rule: newest timestamp wins. */
+  var CMETA = 'mex_m', CPRE = 'mex_c', CLEG = 'save', CHUNK = 3500;
+  var pushT = null, lastPushSig = '', pulling = false;
+
+  function cloudAvailable() {
+    return !!(window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK() && window.VKSDK.storageSet);
+  }
+  function cloudPack() {
+    S.ts = S.ts || Date.now();
+    var str = JSON.stringify(S);
+    var chunks = [];
+    for (var i = 0; i < str.length; i += CHUNK) chunks.push(str.slice(i, i + CHUNK));
+    return { ts: S.ts, n: chunks.length, len: str.length, chunks: chunks, str: str };
+  }
+  function cloudPush(now) {
+    if (!cloudAvailable()) return;
+    if (pushT) { clearTimeout(pushT); pushT = null; }
+    if (now) { doPush(); return; }
+    pushT = setTimeout(doPush, 2000);
+  }
+  function doPush() {
+    pushT = null;
+    if (!cloudAvailable()) return;
+    var p = cloudPack();
+    var sig = p.ts + ':' + p.len;
+    if (sig === lastPushSig) return;
+    var left = p.chunks.length + 2;                       /* chunks + legacy + meta */
+    var failed = false;
+    function tick(ok) {
+      if (ok === false) failed = true;
+      if (--left > 0) return;
+      if (failed) return;                                 /* retry on the next push */
+      window.VKSDK.storageSet(CMETA, p.ts + ':' + p.n, function (ok2) {
+        if (ok2 !== false) lastPushSig = sig;             /* only a confirmed push blocks retries */
+      });
+    }
+    p.chunks.forEach(function (c, i) { window.VKSDK.storageSet(CPRE + i, c, tick); });
+    window.VKSDK.storageSet(CLEG, p.str, tick);           /* best-effort mirror for old builds */
+    tick(true);
+  }
+  function cloudPull(cb) {
+    if (!cloudAvailable() || pulling) { cb && cb(false); return; }
+    pulling = true;
+    function finish(ok) { pulling = false; cb && cb(ok); }
+    window.VKSDK.storageGet(CMETA, function (mv) {
+      var parts = String(mv || '').split(':');
+      var ts = +parts[0] || 0, n = +parts[1] || 0;
+      if (mv && n && ts > (S.ts || 0)) {
+        var keys = [];
+        for (var i = 0; i < n; i++) keys.push(CPRE + i);
+        window.VKSDK.storageGetMany(keys, function (map) {
+          var str = '';
+          for (var i2 = 0; i2 < n; i2++) str += (map[CPRE + i2] || '');
+          applyCloud(str, ts, false, finish);
+        });
+        return;
+      }
+      if (mv) { finish(false); return; }                  /* cloud present but not newer */
+      /* no chunked save yet: migrate a legacy single-key save, if any */
+      window.VKSDK.storageGet(CLEG, function (v) {
+        if (!v) { finish(false); return; }
+        applyCloud(v, 0, true, finish);
+      });
+    });
+  }
+  function applyCloud(str, ts, legacy, cb) {
+    try {
+      var d = JSON.parse(str);
+      if (!d || d.v !== 1) { cb && cb(false); return; }
+      var newer = legacy
+        ? (((d.stats && d.stats.maxLevel) || 0) > ((S.stats && S.stats.maxLevel) || 0) ||
+           ((d.stats && d.stats.coinsTotal) || 0) > ((S.stats && S.stats.coinsTotal) || 0))
+        : ((ts || 0) > (S.ts || 0));
+      if (!newer) { cb && cb(false); return; }
+      var f = freshState();
+      for (var k in f) if (d[k] === undefined) d[k] = f[k];
+      for (var k2 in f.stats) if (d.stats[k2] === undefined) d.stats[k2] = f.stats[k2];
+      d.ts = ts || Date.now();
+      S = d;
+      try { localStorage.setItem('me_save', JSON.stringify(S)); } catch (e) {}
+      dirty = false;
+      lastPushSig = '';                                   /* merged state may need a re-push */
+      cb && cb(true);
+    } catch (e) { cb && cb(false); }
   }
 
   /* ---------- perks ---------- */
@@ -2159,6 +2278,7 @@ window.MEI18N = {
     checkAch: checkAch,
     expTokens: expTokens, expClaim: expClaim,
     hcSubmit: hcSubmit,
+    cloudPush: cloudPush, cloudPull: cloudPull, cloudPack: cloudPack, cloudApply: function (str, ts) { applyCloud(str, ts, false, function () {}); },
     reset: function () { S = freshState(); save(true); },
     replace: function (d) { S = d; save(true); }
   };
@@ -3744,7 +3864,7 @@ window.MEI18N = {
     col.appendChild(row3);
     var row4 = el('div', 'row');
     row4.appendChild(UI.pill(ic('img/souv_r_06.png') + T('expedition'), function () { SC.exp(); UI.show('exp'); }, 'ghost'));
-    row4.appendChild(UI.pill(SVG_FLAG + T('hardcore'), function () { SC.hc(); UI.show('hc'); }, 'ghost'));
+    row4.appendChild(UI.pill(SVG_FLAG + T('hardcore'), function () { SC.hc(); UI.show('hc'); }, 'ghost wrap2'));
     col.appendChild(row4);
     var row5 = el('div', 'row');
     row5.appendChild(UI.pill(ic('img/trophy_01.png') + T('trophy'), function () { SC.trophy(); UI.show('trophy'); }, 'ghost'));
@@ -4202,6 +4322,8 @@ window.MEI18N = {
       wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + adTxt + '</div>'));
       wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + (ME.L === 'ru' ? 'Просмотрено рекламы: ' : 'Ads watched: ') + (ST.S.stats.adViews || 0) + ' · ' + (ME.L === 'ru' ? 'получено монет: ' : 'coins earned: ') + (ST.S.stats.adCoins || 0) + '</div>'));
     }
+    /* cross-platform sync note (moderation rule 2.3.8 visibility) */
+    wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + T('syncNote') + '</div>'));
     wrap.appendChild(UI.pill(T('reset'), function () {
       UI.confirm(T('reset_q'), function () { ST.reset(); location.reload(); }, 'YES');
     }, 'danger'));
@@ -4426,7 +4548,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.18-a',
+    build: '2026.10.30-a',
     /* 'ads' = ad-only monetization (no votes / no IAP). 'iap' keeps the old vote shop. */
     monetization: 'ads',
     L: 'en',
@@ -5192,9 +5314,32 @@ window.MEI18N = {
       box.appendChild(row);
     });
   }
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden && G && !G.over && UI.screen === 'game' && !G.paused) pauseGame();
-  });
+  /* ---------- minimize / restore (VK moderation: music must stop in background) ----
+     Sources: VK bridge VKWebAppViewHide / VKWebAppViewRestore (mobile clients),
+     plus plain-web fallbacks visibilitychange / pagehide. On hide we suspend the
+     WebAudio context + melody loop, auto-pause an active level and flush the
+     cloud save; on restore the player resumes manually from the pause popup. */
+  var appHidden = false, lastCloudPull = 0;
+  function appHide() {
+    if (appHidden) return;
+    appHidden = true;
+    try { ME.audio.suspend(); } catch (e) {}
+    try { if (G && !G.over && UI.screen === 'game' && !G.paused) pauseGame(); } catch (e) {}
+    try { ST.flush(); } catch (e) {}
+    try { ST.cloudPush(true); } catch (e) {}
+  }
+  function appShow() {
+    if (!appHidden) return;
+    appHidden = false;
+    try { ME.audio.resume(); } catch (e) {}
+    /* another device may have progressed while we were away */
+    if (Date.now() - lastCloudPull > 30000) { lastCloudPull = Date.now(); ME.vkLoadSave(true); }
+  }
+  ME.appHide = appHide; ME.appShow = appShow;
+  document.addEventListener('visibilitychange', function () { if (document.hidden) appHide(); else appShow(); });
+  window.addEventListener('pagehide', appHide);
+  window.addEventListener('blur', function () { if (window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK()) appHide(); });
+  window.addEventListener('focus', function () { if (window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK()) appShow(); });
   window.MESDK.pauseEvents(function (paused) {
     if (paused && G && !G.over && !G.paused) pauseGame();
   });
@@ -5252,20 +5397,21 @@ window.MEI18N = {
   }
 
   /* ---------- boot ---------- */
-  ME.vkLoadSave = function () {
-    if (!window.VKSDK || !window.VKSDK.inVK()) return;
-    window.VKSDK.storageGet('save', function (v) {
-      if (!v) return;
+  /* cross-device progress: pull the VK cloud save (chunked, timestamped) and,
+     if it is newer than the local one, apply it and refresh the UI */
+  ME.vkLoadSave = function (silent) {
+    if (!window.VKSDK || !window.VKSDK.inVK || !window.VKSDK.inVK()) return;
+    lastCloudPull = Date.now();
+    ST.cloudPull(function (applied) {
+      if (!applied) return;
+      ME.L = ST.S.lang || ME.L;
+      try { document.documentElement.lang = ME.L; } catch (e) {}
       try {
-        var d = JSON.parse(v);
-        var cur = ST.S;
-        /* take the richer save (by progress) */
-        if (d && d.stats && cur.stats && (d.stats.maxLevel || 0) > (cur.stats.maxLevel || 0)) {
-          var f = ST.fresh();
-          for (var kk in f) if (d[kk] === undefined) d[kk] = f[kk];
-          ST.replace && ST.replace(d);
-        }
+        ME.audio.setMuted(ST.S.settings.mute || window.MESDK.platformMuted());
+        ME.audio.setMusic(ST.S.settings.music !== false);
       } catch (e) {}
+      try { if (UI.screen) refreshCurrent(); } catch (e) {}
+      try { if (!silent) UI.toast(ME.txt('cloudLoaded')); } catch (e) {}
     });
   };
 
@@ -5273,10 +5419,11 @@ window.MEI18N = {
     window.__stage = 'boot';
     try { console.log('%cMagic Express build ' + ME.build, 'color:#ffe9a8;background:#33241a;padding:2px 8px;border-radius:4px'); } catch (e) {}
     UI.init();
-    if (window.VKSDK) { window.VKSDK.init(); ME.vkLoadSave(); }
+    if (window.VKSDK) window.VKSDK.init();
     ST.load();
     ME.L = ST.S.lang || window.MESDK.language();
     ME.audio.setMuted(ST.S.settings.mute || window.MESDK.platformMuted());
+    if (window.VKSDK) { window.VKSDK.onHide = appHide; window.VKSDK.onShow = appShow; ME.vkLoadSave(true); }
     ST.rollDaily();
     /* free daily booster from Dining car */
     if (ST.perk('freeBooster') && ST.S.daily.freeBooster !== D.dayKey()) {
@@ -5328,6 +5475,9 @@ window.MEI18N = {
   /* QA / test hooks (harmless in production) */
   window.MEQA = {
     G: function () { return G; },
+    hide: appHide, show: appShow,
+    audioSuspended: function () { return !!(window.MEaudio && window.MEaudio.isSuspended && window.MEaudio.isSuspended()); },
+    cloudPack: function () { return window.MEState.cloudPack(); },
     swap: function (a, b, c, d) { doSwap({ r: a, c: b }, { r: c, c: d }); },
     forceWin: function () { if (!G) return; G.board.goals.forEach(function (g) { g.got = g.n; }); G.board.checkWin(); G.board.over = true; G.board.win = true; G.over = true; winFlow(); },
     forceLose: function () { if (!G) return; G.board.moves = 0; G.board.over = true; G.board.win = false; G.over = true; loseFlow(); },
