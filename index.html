@@ -4428,14 +4428,7 @@ window.MEI18N = {
     langRow.appendChild(el('div', 'q-label', T('language')));
     langRow.appendChild(UI.pill('RU / EN', function () { ME.setLang(ME.L === 'ru' ? 'en' : 'ru'); SC.settings(); }));
     wrap.appendChild(langRow);
-    if (ME.adsOn()) {
-      var adTxt = (ME.L === 'ru' ? 'Монетизация: только реклама. Доната нет — всё добывается просмотром видео.' : 'Monetization: ads only. No in-app purchases.');
-      if (!ME.realAds()) adTxt += (ME.L === 'ru' ? ' Вне VK реклама показывается заглушкой.' : ' Outside VK a placeholder ad is shown.');
-      wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + adTxt + '</div>'));
-      wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + (ME.L === 'ru' ? 'Просмотрено рекламы: ' : 'Ads watched: ') + (ST.S.stats.adViews || 0) + ' · ' + (ME.L === 'ru' ? 'получено монет: ' : 'coins earned: ') + (ST.S.stats.adCoins || 0) + '</div>'));
-    }
-    /* cross-platform sync note (moderation rule 2.3.8 visibility) */
-    wrap.appendChild(el('div', 'glass set-row dim', '<div class="q-label">' + T('syncNote') + '</div>'));
+    /* (info rows removed: monetization / ad stats / sync note) */
     wrap.appendChild(UI.pill(T('reset'), function () {
       UI.confirm(T('reset_q'), function () { ST.reset(); location.reload(); }, 'YES');
     }, 'danger'));
@@ -5615,5 +5608,5 @@ window.MEI18N = {
 })();
 
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a586c0baaac3e49a',t:'MTc5NDMzMTQ4OA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a586c0baaac3e49a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a586cd642b72e49a',t:'MTc5NDMzMjAwNw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a586cd642b72e49a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
