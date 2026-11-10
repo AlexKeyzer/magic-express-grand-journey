@@ -3,7 +3,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026.10.30-a">
+<meta name="build" content="2026.11.10-a">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -665,6 +665,19 @@ html, body {
   position: relative; z-index: 2; font-size: 11px; color: rgba(255,255,255,.8);
   padding: 0 16px; text-align: center; line-height: 1.35;
 }
+
+
+/* ===== FIX build 2026.11.10: settings collapse + map overlap (moderation) ===== */
+/* Scrollable column lists: children must never shrink.
+   .pill has overflow:hidden, so as a flex item its automatic minimum size is 0
+   and it collapses to a thin bar when the list overflows (settings reset button). */
+.set-wrap, .quest-wrap, .map-wrap, .chest-list { min-height: 0; }
+.set-wrap > *, .quest-wrap > *, .map-wrap > *, .chest-list > * { flex: 0 0 auto; }
+.exp-wrap > * { flex: 0 0 auto; }
+.set-wrap > .pill { align-self: stretch; }
+.ver { flex: 0 0 auto; }
+/* Map: station plates must stay clear of nodes and the train */
+.map-stplate { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
 
 </style>
 
@@ -1961,11 +1974,10 @@ window.MEI18N = {
 
   function load() {
     var d = window.MESDK.saveGet();
-    if (d && d.v === 1) {
-      var f = freshState();
-      for (var k in f) if (d[k] === undefined) d[k] = f[k];
-      for (var k2 in f.stats) if (d.stats[k2] === undefined) d.stats[k2] = f.stats[k2];
-      S = d;
+    /* accept saves from any build version: rule 2.3.8 requires progress to
+       survive between versions, so a version bump must never wipe it */
+    if (d && typeof d === 'object') {
+      S = normalizeSave(d);
     }
     dirty = false;
   }
@@ -1979,7 +1991,7 @@ window.MEI18N = {
     saveTimer = null;
     if (!dirty) return;
     dirty = false;
-    S.ts = Date.now();                 /* stamp every save: cloud merge is last-write-wins */
+    S.ts = Date.now();                 /* stamp every save (merge itself is progress-based, see below) */
     window.MESDK.saveSet(S);
     cloudPush(false);                  /* debounced mirror to VK cloud (cross-device sync) */
   }
@@ -1987,12 +1999,25 @@ window.MEI18N = {
   /* ---------- cross-platform cloud save (VK storage, moderation rule 2.3.8) ----------
      Layout: meta key 'mex_m' = "<ts>:<chunks>", chunk keys 'mex_c0..N' (<=3500 chars
      each — platform value limit is 4096), plus a legacy single 'save' key mirror so
-     older builds still see the progress. Merge rule: newest timestamp wins. */
+     older builds still see the progress.
+     Merge rule (fixed): progress wins, timestamp breaks ties. The old
+     last-write-wins rule wiped cloud progress on a fresh device, because
+     rollDaily() stamped the empty local save with "now" before the first
+     cloud pull finished. Pushes are therefore gated until the first pull
+     completes, and monotonic fields (level, stars, souvenirs, cars, stats)
+     are merged with max/union so a device can never regress progress. */
   var CMETA = 'mex_m', CPRE = 'mex_c', CLEG = 'save', CHUNK = 3500;
   var pushT = null, lastPushSig = '', pulling = false;
+  var cloudReady = false, pushQueued = false, readyT = null;   /* first pull finished: pushes allowed */
 
   function cloudAvailable() {
     return !!(window.VKSDK && window.VKSDK.inVK && window.VKSDK.inVK() && window.VKSDK.storageSet);
+  }
+  function cloudMarkReady() {
+    if (cloudReady) return;
+    cloudReady = true;
+    if (readyT) { clearTimeout(readyT); readyT = null; }
+    if (pushQueued) { pushQueued = false; doPush(); }   /* flush a push queued while waiting for the pull */
   }
   function cloudPack() {
     S.ts = S.ts || Date.now();
@@ -2001,8 +2026,15 @@ window.MEI18N = {
     for (var i = 0; i < str.length; i += CHUNK) chunks.push(str.slice(i, i + CHUNK));
     return { ts: S.ts, n: chunks.length, len: str.length, chunks: chunks, str: str };
   }
-  function cloudPush(now) {
+  function cloudPush(now, force) {
     if (!cloudAvailable()) return;
+    if (!cloudReady && !force) {
+      /* never overwrite the cloud before the first pull has had a chance to
+         read it (fresh-device race). Queue one push; cloudMarkReady runs it. */
+      pushQueued = true;
+      if (!readyT) readyT = setTimeout(cloudMarkReady, 10000);   /* safety: pull hung */
+      return;
+    }
     if (pushT) { clearTimeout(pushT); pushT = null; }
     if (now) { doPush(); return; }
     pushT = setTimeout(doPush, 2000);
@@ -2011,66 +2043,134 @@ window.MEI18N = {
     pushT = null;
     if (!cloudAvailable()) return;
     var p = cloudPack();
-    var sig = p.ts + ':' + p.len;
+    var h = 5381; for (var hi = 0; hi < p.str.length; hi++) h = ((h << 5) + h + p.str.charCodeAt(hi)) >>> 0;
+    var sig = p.ts + ':' + p.len + ':' + h;
     if (sig === lastPushSig) return;
-    var left = p.chunks.length + 2;                       /* chunks + legacy + meta */
-    var failed = false;
+    var left = p.chunks.length;                            /* only chunks gate the meta write */
     function tick(ok) {
-      if (ok === false) failed = true;
+      if (ok === false) return;                            /* a chunk failed: keep the old meta, retry next push */
       if (--left > 0) return;
-      if (failed) return;                                 /* retry on the next push */
       window.VKSDK.storageSet(CMETA, p.ts + ':' + p.n, function (ok2) {
-        if (ok2 !== false) lastPushSig = sig;             /* only a confirmed push blocks retries */
+        if (ok2 !== false) lastPushSig = sig;              /* only a confirmed push blocks retries */
       });
     }
     p.chunks.forEach(function (c, i) { window.VKSDK.storageSet(CPRE + i, c, tick); });
-    window.VKSDK.storageSet(CLEG, p.str, tick);           /* best-effort mirror for old builds */
-    tick(true);
+    /* legacy mirror is best-effort only: a full save easily exceeds the 4096-char
+       platform limit, and its failure must NOT block the chunked save (old bug:
+       meta was never written once the save grew past 4096 chars, so nothing synced). */
+    if (p.str.length <= 4000) window.VKSDK.storageSet(CLEG, p.str, function () {});
   }
   function cloudPull(cb) {
     if (!cloudAvailable() || pulling) { cb && cb(false); return; }
     pulling = true;
-    function finish(ok) { pulling = false; cb && cb(ok); }
+    var done = false;
+    function finish(ok) {
+      if (done) return; done = true;
+      pulling = false;
+      cloudMarkReady();
+      cb && cb(ok);
+    }
+    var guard = setTimeout(function () { finish(false); }, 15000);  /* never hang the gate */
     window.VKSDK.storageGet(CMETA, function (mv) {
       var parts = String(mv || '').split(':');
       var ts = +parts[0] || 0, n = +parts[1] || 0;
-      if (mv && n && ts > (S.ts || 0)) {
+      if (mv && n) {
         var keys = [];
         for (var i = 0; i < n; i++) keys.push(CPRE + i);
         window.VKSDK.storageGetMany(keys, function (map) {
           var str = '';
           for (var i2 = 0; i2 < n; i2++) str += (map[CPRE + i2] || '');
-          applyCloud(str, ts, false, finish);
+          applyCloud(str, ts, false, function (ok) {
+            if (ok) { clearTimeout(guard); finish(true); return; }
+            /* chunked data corrupt/partial: fall back to the legacy mirror */
+            window.VKSDK.storageGet(CLEG, function (v) {
+              if (!v) { clearTimeout(guard); finish(false); return; }
+              applyCloud(v, 0, true, function (ok2) { clearTimeout(guard); finish(ok2); });
+            });
+          });
         });
         return;
       }
-      if (mv) { finish(false); return; }                  /* cloud present but not newer */
       /* no chunked save yet: migrate a legacy single-key save, if any */
       window.VKSDK.storageGet(CLEG, function (v) {
-        if (!v) { finish(false); return; }
-        applyCloud(v, 0, true, finish);
+        if (!v) { clearTimeout(guard); finish(false); return; }
+        applyCloud(v, 0, true, function (ok) { clearTimeout(guard); finish(ok); });
       });
     });
+  }
+  function progressScore(d) {
+    if (!d || typeof d !== 'object') return -1;
+    var stars = 0; for (var k in (d.stars || {})) stars += d.stars[k] || 0;
+    var souv = d.souv ? Object.keys(d.souv).length : 0;
+    var wins = (d.stats && d.stats.wins) || 0;
+    return (d.lvl || 0) * 100 + stars * 2 + souv + wins;
+  }
+  function normalizeSave(d) {
+    var f = freshState();
+    for (var k in f) if (d[k] === undefined) d[k] = f[k];
+    if (!d.stats || typeof d.stats !== 'object') d.stats = f.stats;
+    for (var k2 in f.stats) if (d.stats[k2] === undefined) d.stats[k2] = f.stats[k2];
+    if (!d.daily || typeof d.daily !== 'object') d.daily = f.daily;
+    if (!d.week || typeof d.week !== 'object') d.week = f.week;
+    if (!d.ads || typeof d.ads !== 'object') d.ads = f.ads;
+    if (!d.settings || typeof d.settings !== 'object') d.settings = f.settings;
+    return d;
+  }
+  function mergeSaves(local, cloud) {
+    /* monotonic progress fields take the max/union; everything else follows
+       the winner (higher progress score, newer timestamp on a tie) */
+    var winner = progressScore(cloud) > progressScore(local) ? cloud
+      : progressScore(local) > progressScore(cloud) ? local
+      : ((cloud.ts || 0) >= (local.ts || 0) ? cloud : local);
+    var m = normalizeSave(JSON.parse(JSON.stringify(winner)));
+    m.lvl = Math.max(local.lvl || 0, cloud.lvl || 0);
+    m.stars = {};
+    for (var a in (local.stars || {})) m.stars[a] = Math.max(m.stars[a] || 0, local.stars[a] || 0);
+    for (var b in (cloud.stars || {})) m.stars[b] = Math.max(m.stars[b] || 0, cloud.stars[b] || 0);
+    m.souv = {};
+    for (var c in (local.souv || {})) m.souv[c] = 1;
+    for (var e in (cloud.souv || {})) m.souv[e] = 1;
+    m.cars = [];
+    for (var i = 0; i < 18; i++) m.cars[i] = Math.max((local.cars || [])[i] || 0, (cloud.cars || [])[i] || 0);
+    m.ach = {};
+    for (var g in (local.ach || {})) m.ach[g] = 1;
+    for (var h2 in (cloud.ach || {})) m.ach[h2] = 1;
+    m.boosters = {};
+    for (var j in (local.boosters || {})) m.boosters[j] = Math.max(m.boosters[j] || 0, local.boosters[j] || 0);
+    for (var k3 in (cloud.boosters || {})) m.boosters[k3] = Math.max(m.boosters[k3] || 0, cloud.boosters[k3] || 0);
+    m.stats = {};
+    for (var s in (local.stats || {})) m.stats[s] = Math.max(m.stats[s] || 0, local.stats[s] || 0);
+    for (var s2 in (cloud.stats || {})) m.stats[s2] = Math.max(m.stats[s2] || 0, cloud.stats[s2] || 0);
+    m.ts = Math.max(local.ts || 0, cloud.ts || 0, Date.now());
+    return m;
   }
   function applyCloud(str, ts, legacy, cb) {
     try {
       var d = JSON.parse(str);
-      if (!d || d.v !== 1) { cb && cb(false); return; }
-      var newer = legacy
-        ? (((d.stats && d.stats.maxLevel) || 0) > ((S.stats && S.stats.maxLevel) || 0) ||
-           ((d.stats && d.stats.coinsTotal) || 0) > ((S.stats && S.stats.coinsTotal) || 0))
-        : ((ts || 0) > (S.ts || 0));
-      if (!newer) { cb && cb(false); return; }
-      var f = freshState();
-      for (var k in f) if (d[k] === undefined) d[k] = f[k];
-      for (var k2 in f.stats) if (d.stats[k2] === undefined) d.stats[k2] = f.stats[k2];
-      d.ts = ts || Date.now();
-      S = d;
-      try { localStorage.setItem('me_save', JSON.stringify(S)); } catch (e) {}
+      if (!d || typeof d !== 'object' || d.lvl == null) { cb && cb(false); return; }
+      d = normalizeSave(d);
+      if (ts) d.ts = ts;
+      var merged = mergeSaves(S, d);
+      var mCopy = JSON.parse(JSON.stringify(merged)); delete mCopy.ts;
+      var sCopy = JSON.parse(JSON.stringify(S)); delete sCopy.ts;
+      var changed = JSON.stringify(mCopy) !== JSON.stringify(sCopy);
+      S = merged;
+      try { window.MESDK.saveSet(S); } catch (e) {}
       dirty = false;
       lastPushSig = '';                                   /* merged state may need a re-push */
-      cb && cb(true);
+      if (changed) cloudPush(true);                       /* converge the cloud to the merged state */
+      cb && cb(changed);
     } catch (e) { cb && cb(false); }
+  }
+  function cloudClear(cb) {
+    /* wipe the cloud copy (used by "reset progress"): empty values, then a fresh push */
+    if (!cloudAvailable()) { cb && cb(false); return; }
+    var keys = [CMETA, CLEG];
+    for (var i = 0; i < 10; i++) keys.push(CPRE + i);
+    var left = keys.length;
+    keys.forEach(function (k) {
+      window.VKSDK.storageSet(k, '', function () { if (--left <= 0) cb && cb(true); });
+    });
   }
 
   /* ---------- perks ---------- */
@@ -2278,8 +2378,16 @@ window.MEI18N = {
     checkAch: checkAch,
     expTokens: expTokens, expClaim: expClaim,
     hcSubmit: hcSubmit,
-    cloudPush: cloudPush, cloudPull: cloudPull, cloudPack: cloudPack, cloudApply: function (str, ts) { applyCloud(str, ts, false, function () {}); },
-    reset: function () { S = freshState(); save(true); },
+    cloudPush: cloudPush, cloudPull: cloudPull, cloudPack: cloudPack, cloudClear: cloudClear,
+    cloudReady: function () { return cloudReady; },
+    cloudApply: function (str, ts) { applyCloud(str, ts, false, function () {}); },
+    reset: function () {
+      S = freshState(); S.ts = Date.now();
+      try { window.MESDK.saveSet(S); } catch (e) {}
+      dirty = false;
+      /* wipe the cloud copy too, otherwise the old progress is pulled back on the next boot */
+      cloudClear(function () { cloudPush(true, true); });
+    },
     replace: function (d) { S = d; save(true); }
   };
 })();
@@ -3909,7 +4017,7 @@ window.MEI18N = {
     var chap = SC._chap || curChap;
     SC._chap = chap;
     var world = el('div', 'map-world');
-    var SEG = 64, TOP = 120, trainSeg = null, trainY = 0;
+    var SEG = 64, TOP = 170, trainSeg = null, trainY = 0;
     var seg = el('div', 'map-seg' + (ST.S.lvl > (chap - 1) * D.CHAPTER ? '' : ' locked'));
     seg.style.backgroundImage = 'url(' + (window.MEassetUrl ? window.MEassetUrl('bg_reg' + chap + '.jpg') : 'img/bg_reg' + chap + '.jpg') + ')';
     seg.style.height = (TOP + D.CHAPTER * SEG + 90) + 'px';
@@ -3929,7 +4037,11 @@ window.MEI18N = {
       (function (lvl, x, y, i3) {
         if (i3 % 25 === 0) {
           var sp = el('div', 'map-stplate glass', T('station') + ' ' + (i3 / 25 + 1));
-          sp.style.left = Math.min(84, x + 26) + '%'; sp.style.top = y + 'px';
+          /* plate on the opposite side of the node from the screen centre:
+             the old x+26 clamp stacked plate, node and train on top of each
+             other whenever the path ran along the right edge (screenshot 2) */
+          sp.style.left = (x < 50 ? Math.min(82, x + 24) : Math.max(18, x - 24)) + '%';
+          sp.style.top = y + 'px';
           seg.appendChild(sp);
         }
         var unlocked = lvl <= ST.S.lvl;
@@ -3946,7 +4058,7 @@ window.MEI18N = {
         if (lvl === ST.S.lvl) {
           var tr = el('div', 'map-train');
           tr.innerHTML = '<i class="mt-steam"></i><img src="img/train_car_01_fixed.png" alt="">';
-          tr.style.left = Math.min(84, x + 20) + '%'; tr.style.top = (y - 36) + 'px';
+          tr.style.left = Math.max(16, Math.min(84, x)) + '%'; tr.style.top = (y - 54) + 'px';
           seg.appendChild(tr);
           trainSeg = seg; trainY = y;
         }
@@ -3964,7 +4076,7 @@ window.MEI18N = {
         stepI++;
         var node = world.querySelector('.map-node[data-lvl="' + stepI + '"]');
         if (!node) { clearInterval(tm); return; }
-        trEl.style.left = Math.min(84, parseFloat(node.style.left) + 20) + '%'; trEl.style.top = (parseInt(node.style.top, 10) - 36) + 'px';
+        trEl.style.left = Math.max(16, Math.min(84, parseFloat(node.style.left))) + '%'; trEl.style.top = (parseInt(node.style.top, 10) - 54) + 'px';
         world.scrollTop = Math.max(0, seg.offsetTop + parseInt(node.style.top, 10) - 340);
         ME.audio.sfx.tap();
         if (stepI >= ST.S.lvl) clearInterval(tm);
@@ -4548,7 +4660,7 @@ window.MEI18N = {
   function $(id) { return document.getElementById(id); }
 
   var ME = window.ME = {
-    build: '2026.10.30-a',
+    build: '2026.11.10-a',
     /* 'ads' = ad-only monetization (no votes / no IAP). 'iap' keeps the old vote shop. */
     monetization: 'ads',
     L: 'en',
@@ -5402,17 +5514,26 @@ window.MEI18N = {
   ME.vkLoadSave = function (silent) {
     if (!window.VKSDK || !window.VKSDK.inVK || !window.VKSDK.inVK()) return;
     lastCloudPull = Date.now();
-    ST.cloudPull(function (applied) {
-      if (!applied) return;
-      ME.L = ST.S.lang || ME.L;
-      try { document.documentElement.lang = ME.L; } catch (e) {}
-      try {
-        ME.audio.setMuted(ST.S.settings.mute || window.MESDK.platformMuted());
-        ME.audio.setMusic(ST.S.settings.music !== false);
-      } catch (e) {}
-      try { if (UI.screen) refreshCurrent(); } catch (e) {}
-      try { if (!silent) UI.toast(ME.txt('cloudLoaded')); } catch (e) {}
-    });
+    var retried = false;
+    function attempt() {
+      ST.cloudPull(function (applied) {
+        if (applied) {
+          ME.L = ST.S.lang || ME.L;
+          try { document.documentElement.lang = ME.L; } catch (e) {}
+          try {
+            ME.audio.setMuted(ST.S.settings.mute || window.MESDK.platformMuted());
+            ME.audio.setMusic(ST.S.settings.music !== false);
+          } catch (e) {}
+          try { if (UI.screen) refreshCurrent(); } catch (e) {}
+          try { if (!silent) UI.toast(ME.txt('cloudLoaded')); } catch (e) {}
+          return;
+        }
+        /* the official bridge may have loaded after the first attempt
+           (micro-bridge timeout): retry once so sync never silently fails */
+        if (!retried && window.VKSDK.vkBridge) { retried = true; setTimeout(attempt, 1500); }
+      });
+    }
+    attempt();
   };
 
   function boot() {
@@ -5453,7 +5574,7 @@ window.MEI18N = {
       var t = ev.target && ev.target.closest ? ev.target.closest('.pill, .map-lv, .boost-btn, .whistle-btn, .pause-btn, .souv-cell, .pax-cell, .bell') : null;
       if (t && ev.cancelable) { ev.preventDefault(); t.click(); }
     }, { passive: false });
-    window.addEventListener('beforeunload', function () { window.MESDK.gameStop(); ST.flush(); });
+    window.addEventListener('beforeunload', function () { window.MESDK.gameStop(); ST.flush(); try { ST.cloudPush(true); } catch (e) {} });
     document.addEventListener('touchstart', function once() { ME.audio.unlock(); document.removeEventListener('touchstart', once); }, { passive: true });
     document.addEventListener('mousedown', function once() { ME.audio.unlock(); document.removeEventListener('mousedown', once); });
   }
@@ -5494,5 +5615,5 @@ window.MEI18N = {
 })();
 
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a586c0baaac3e49a',t:'MTc5NDMzMTQ4OA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a586c0baaac3e49a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
